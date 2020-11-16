@@ -68,6 +68,21 @@ func With(data []byte, opts ...func(*Buffer) error) (*Buffer, error) {
 	return b, nil
 }
 
+// Write writes the contents of p to the buffer at current offset, growing
+// the buffer as needed. The return value n is the length of p; err is
+// always nil.
+func (b *Buffer) Write(p []byte) (int, error) {
+	return b.write(p), nil
+}
+
+// write writes p at offset b.off.
+func (b *Buffer) write(p []byte) int {
+	b.grow(len(p))
+	n := copy(b.buf[b.off:], p)
+	b.off += n
+	return n
+}
+
 // ReadFrom reads data from r until EOF and appends it to the buffer at b.off,
 // growing the buffer as needed. The return value is the number of bytes read.
 // Any error except io.EOF encountered during the read is also returned. If the
@@ -114,6 +129,12 @@ func (b *Buffer) ReadFrom(r io.Reader) (int64, error) {
 // tryGrowByReslice is a inlineable version of grow for the fast-case where the
 // internal buffer only needs to be resliced. It returns whether it succeeded.
 func (b *Buffer) tryGrowByReslice(n int) bool {
+	// No need to do anything if there is enough space
+	// between current offset and the length of the buffer.
+	if n <= len(b.buf)-b.off {
+		return true
+	}
+
 	if n <= cap(b.buf)-b.off {
 		b.buf = b.buf[:b.off+n]
 		return true
