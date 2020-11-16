@@ -11,6 +11,15 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+func Test_New_Offset_Negative(t *testing.T) {
+	// --- When ---
+	buf, err := New(Offset(-1))
+
+	// --- Then ---
+	assert.ErrorIs(t, err, ErrOutOfBounds)
+	assert.Nil(t, buf)
+}
+
 func Test_With(t *testing.T) {
 	// --- When ---
 	buf, err := With([]byte{0, 1, 2})
@@ -871,4 +880,153 @@ func Test_Buffer_Seek_BeyondLen(t *testing.T) {
 	// --- Then ---
 	assert.NoError(t, err)
 	assert.Exactly(t, int64(5), n)
+}
+
+func Test_Buffer_Truncate_ToZero(t *testing.T) {
+	// --- Given ---
+	buf, err := With([]byte{0, 1, 2, 3})
+	require.NoError(t, err)
+
+	// --- When ---
+	err = buf.Truncate(0)
+
+	// --- Then ---
+	assert.NoError(t, err)
+	assert.Exactly(t, 0, buf.Offset())
+	assert.Exactly(t, 0, buf.Len())
+	assert.Exactly(t, 4, buf.Cap())
+	assert.Exactly(t, []byte{}, buf.buf)
+	assert.NoError(t, buf.Close())
+}
+
+func Test_Buffer_Truncate_ToOne(t *testing.T) {
+	// --- Given ---
+	buf, err := With([]byte{0, 1, 2, 3})
+	require.NoError(t, err)
+
+	// --- When ---
+	err = buf.Truncate(1)
+
+	// --- Then ---
+	assert.NoError(t, err)
+	assert.Exactly(t, 0, buf.Offset())
+	assert.Exactly(t, 1, buf.Len())
+	assert.Exactly(t, 4, buf.Cap())
+	assert.Exactly(t, []byte{0}, buf.buf)
+	assert.NoError(t, buf.Close())
+}
+
+func Test_Buffer_Truncate_ToZeroAndWrite(t *testing.T) {
+	// --- Given ---
+	buf, err := With([]byte{0, 1, 2, 3})
+	require.NoError(t, err)
+
+	// --- When ---
+	err = buf.Truncate(0)
+	assert.NoError(t, err)
+
+	n, err := buf.Write([]byte{4, 5})
+
+	// --- Then ---
+	assert.NoError(t, err)
+	assert.Exactly(t, 2, n)
+	assert.Exactly(t, 2, buf.Offset())
+	assert.Exactly(t, 2, buf.Len())
+	assert.Exactly(t, 4, buf.Cap())
+	assert.Exactly(t, []byte{4, 5}, buf.buf)
+	assert.NoError(t, buf.Close())
+}
+
+func Test_Buffer_Truncate_BeyondLenAndWrite(t *testing.T) {
+	// --- Given ---
+	buf, err := With([]byte{0, 1, 2, 3}, Append)
+	require.NoError(t, err)
+
+	// --- When ---
+	assert.NoError(t, buf.Truncate(8))
+	n, err := buf.Write([]byte{4, 5})
+
+	// --- Then ---
+	assert.NoError(t, err)
+	assert.Exactly(t, 2, n)
+	assert.Exactly(t, 6, buf.Offset())
+	assert.Exactly(t, 8, buf.Len())
+	assert.Exactly(t, 8, buf.Cap())
+	assert.Exactly(t, []byte{0, 1, 2, 3, 4, 5, 0, 0}, buf.buf)
+	assert.NoError(t, buf.Close())
+}
+
+func Test_Buffer_Truncate_BeyondCapAndWrite(t *testing.T) {
+	// --- Given ---
+	data := make([]byte, 4, 8)
+	data[0] = 0
+	data[1] = 1
+	data[2] = 2
+	data[3] = 3
+	buf, err := With(data, Append)
+	require.NoError(t, err)
+
+	// --- When ---
+	assert.NoError(t, buf.Truncate(10))
+	n, err := buf.Write([]byte{4, 5})
+
+	// --- Then ---
+	assert.NoError(t, err)
+	assert.Exactly(t, 2, n)
+	assert.Exactly(t, 6, buf.Offset())
+	assert.Exactly(t, 10, buf.Len())
+	assert.Exactly(t, 10, buf.Cap())
+	assert.Exactly(t, []byte{0, 1, 2, 3, 4, 5, 0, 0, 0, 0}, buf.buf)
+	assert.NoError(t, buf.Close())
+}
+
+func Test_Buffer_Truncate_ExtendBeyondLenResetAndWrite(t *testing.T) {
+	// --- Given ---
+	buf, err := With([]byte{0, 1, 2, 3}, Append)
+	require.NoError(t, err)
+
+	// --- When ---
+	assert.NoError(t, buf.Truncate(8))
+	assert.NoError(t, buf.Truncate(0))
+	n, err := buf.Write([]byte{4, 5})
+
+	// --- Then ---
+	assert.NoError(t, err)
+	assert.Exactly(t, 2, n)
+	assert.Exactly(t, 6, buf.Offset())
+	assert.Exactly(t, 6, buf.Len())
+	assert.Exactly(t, 8, buf.Cap())
+	assert.Exactly(t, []byte{0, 0, 0, 0, 4, 5}, buf.buf)
+	assert.NoError(t, buf.Close())
+}
+
+func Test_Buffer_Truncate_EdgeCaseWhenSizeEqualsLength(t *testing.T) {
+	// --- Given ---
+	buf, err := With([]byte{0, 1, 2, 3}, Append)
+	require.NoError(t, err)
+
+	// --- When ---
+	assert.NoError(t, buf.Truncate(4))
+	n, err := buf.Write([]byte{4, 5})
+
+	// --- Then ---
+	assert.NoError(t, err)
+	assert.Exactly(t, 2, n)
+	assert.Exactly(t, 6, buf.Offset())
+	assert.Exactly(t, 6, buf.Len())
+	assert.Exactly(t, 6, buf.Cap())
+	assert.Exactly(t, []byte{0, 1, 2, 3, 4, 5}, buf.buf)
+	assert.NoError(t, buf.Close())
+}
+
+func Test_Buffer_Truncate_Error(t *testing.T) {
+	// --- Given ---
+	buf, err := With([]byte{0, 1, 2}, Append)
+	require.NoError(t, err)
+
+	// --- When ---
+	err = buf.Truncate(-1)
+
+	// --- Then ---
+	assert.ErrorIs(t, err, os.ErrInvalid)
 }

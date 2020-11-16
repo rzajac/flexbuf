@@ -5,10 +5,18 @@ import (
 	"errors"
 	"io"
 	"os"
+	"sync"
 )
 
 // ErrOutOfBounds is returned for invalid offsets.
 var ErrOutOfBounds = errors.New("offset out of bounds")
+
+// pool of byte buffers.
+var pool = sync.Pool{
+	New: func() interface{} {
+		return make([]byte, bytes.MinRead)
+	},
+}
 
 // Offset is the constructor option setting the initial buffer offset to off.
 func Offset(off int) func(*Buffer) error {
@@ -193,6 +201,26 @@ func (b *Buffer) Seek(offset int64, whence int) (int64, error) {
 	b.off = off
 
 	return int64(b.off), nil
+}
+
+// Truncate changes the size of the buffer discarding bytes at offsets greater
+// then size. It does not change the offset.
+func (b *Buffer) Truncate(size int64) error {
+	if size < 0 {
+		return os.ErrInvalid
+	}
+
+	// Extend the size of the buffer.
+	if int(size) > len(b.buf) {
+		b.grow(int(size) - len(b.buf))
+		return nil
+	}
+
+	// Reduce the size of the buffer.
+	zeroOutSlice(b.buf[size:])
+	b.buf = b.buf[:size]
+
+	return nil
 }
 
 // tryGrowByReslice is a inlineable version of grow for the fast-case where the
