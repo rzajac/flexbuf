@@ -83,6 +83,17 @@ func (b *Buffer) write(p []byte) int {
 	return n
 }
 
+// WriteAt writes len(p) bytes to the buffer starting at byte offset off.
+// It returns the number of bytes written; err is always nil. It does not
+// change the offset.
+func (b *Buffer) WriteAt(p []byte, off int64) (int, error) {
+	prev := b.off
+	b.off = int(off)
+	n := b.write(p)
+	b.off = prev
+	return n, nil
+}
+
 // ReadFrom reads data from r until EOF and appends it to the buffer at b.off,
 // growing the buffer as needed. The return value is the number of bytes read.
 // Any error except io.EOF encountered during the read is also returned. If the
