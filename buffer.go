@@ -94,6 +94,23 @@ func (b *Buffer) WriteAt(p []byte, off int64) (int, error) {
 	return n, nil
 }
 
+// Read reads the next len(p) bytes from the buffer or until the buffer
+// is drained. The return value is the number of bytes read. If the
+// buffer has no data to return, err is io.EOF (unless len(p) is zero);
+// otherwise it is nil.
+func (b *Buffer) Read(p []byte) (int, error) {
+	// Nothing more to read.
+	if len(p) > 0 && b.off >= len(b.buf) {
+		return 0, io.EOF
+	}
+	n := copy(p, b.buf[b.off:])
+	b.off += n
+	if len(b.buf[b.off:]) > 0 {
+		return n, nil
+	}
+	return n, io.EOF
+}
+
 // ReadFrom reads data from r until EOF and appends it to the buffer at b.off,
 // growing the buffer as needed. The return value is the number of bytes read.
 // Any error except io.EOF encountered during the read is also returned. If the
@@ -129,7 +146,6 @@ func (b *Buffer) ReadFrom(r io.Reader) (int64, error) {
 		// The io.EOF is not an error.
 		if err == io.EOF {
 			return int64(total), nil
-
 		}
 		if err != nil {
 			return int64(total), err
