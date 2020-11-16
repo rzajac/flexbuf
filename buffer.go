@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"errors"
 	"io"
+	"os"
 )
 
 // ErrOutOfBounds is returned for invalid offsets.
@@ -169,6 +170,29 @@ func (b *Buffer) ReadFrom(r io.Reader) (int64, error) {
 			return int64(total), err
 		}
 	}
+}
+
+// Seek sets the offset for the next Read or Write on the buffer to offset,
+// interpreted according to whence: 0 means relative to the origin of the file,
+// 1 means relative to the current offset, and 2 means relative to the end.
+// It returns the new offset and an error, if any.
+func (b *Buffer) Seek(offset int64, whence int) (int64, error) {
+	var off int
+	switch whence {
+	case io.SeekStart:
+		off = int(offset)
+	case io.SeekCurrent:
+		off = b.off + int(offset)
+	case io.SeekEnd:
+		off = len(b.buf) + int(offset)
+	}
+
+	if off < 0 {
+		return 0, os.ErrInvalid
+	}
+	b.off = off
+
+	return int64(b.off), nil
 }
 
 // tryGrowByReslice is a inlineable version of grow for the fast-case where the

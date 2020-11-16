@@ -3,6 +3,8 @@ package flexbuf
 import (
 	"bytes"
 	"io"
+	"io/ioutil"
+	"os"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -763,4 +765,57 @@ func Test_Buffer_ReadAt(t *testing.T) {
 			assert.NoError(t, buf.Close(), "test %s", tc.testN)
 		})
 	}
+}
+
+func Test_Seek(t *testing.T) {
+	// --- Given ---
+	tt := []struct {
+		testN string
+
+		seek   int64
+		whence int
+		wantN  int64
+		wantD  []byte
+	}{
+		{"1", 0, io.SeekCurrent, 1, []byte{1, 2, 3}},
+		{"2", 0, io.SeekEnd, 4, []byte{}},
+		{"3", -1, io.SeekEnd, 3, []byte{3}},
+		{"4", -3, io.SeekEnd, 1, []byte{1, 2, 3}},
+		{"5", 0, io.SeekStart, 0, []byte{0, 1, 2, 3}},
+		{"6", 2, io.SeekStart, 2, []byte{2, 3}},
+	}
+
+	for _, tc := range tt {
+		t.Run(tc.testN, func(t *testing.T) {
+			// --- Given ---
+			buf, err := With([]byte{0, 1, 2, 3}, Offset(1))
+			require.NoError(t, err, "test %s", tc.testN)
+
+			// --- When ---
+			n, err := buf.Seek(tc.seek, tc.whence)
+
+			// --- Then ---
+			assert.NoError(t, err, "test %s", tc.testN)
+			assert.Exactly(t, tc.wantN, n, "test %s", tc.testN)
+
+			got, err := ioutil.ReadAll(buf)
+			assert.NoError(t, err, "test %s", tc.testN)
+			assert.Exactly(t, tc.wantD, got, "test %s", tc.testN)
+
+			assert.NoError(t, buf.Close(), "test %s", tc.testN)
+		})
+	}
+}
+
+func Test_Buffer_Seek_NegativeFinalOffset(t *testing.T) {
+	// --- Given ---
+	buf, err := With([]byte{0, 1, 2})
+	require.NoError(t, err)
+
+	// --- When ---
+	n, err := buf.Seek(-4, io.SeekEnd)
+
+	// --- Then ---
+	assert.ErrorIs(t, err, os.ErrInvalid)
+	assert.Exactly(t, int64(0), n)
 }
