@@ -13,7 +13,7 @@ var ErrOutOfBounds = errors.New("offset out of bounds")
 // Offset is the constructor option setting the initial buffer offset to off.
 func Offset(off int) func(*Buffer) error {
 	return func(b *Buffer) error {
-		if off > len(b.buf) {
+		if off < 0 || off > len(b.buf) {
 			return ErrOutOfBounds
 		}
 		b.off = off

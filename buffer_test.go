@@ -31,6 +31,24 @@ func Test_With_Offset(t *testing.T) {
 	assert.Exactly(t, []byte{0, 1, 2}, buf.buf)
 }
 
+func Test_With_Offset_Negative(t *testing.T) {
+	// --- When ---
+	buf, err := With([]byte{0, 1, 2}, Offset(-1))
+
+	// --- Then ---
+	assert.ErrorIs(t, err, ErrOutOfBounds)
+	assert.Nil(t, buf)
+}
+
+func Test_With_Offset_BeyondLen(t *testing.T) {
+	// --- When ---
+	buf, err := With([]byte{0, 1, 2}, Offset(5))
+
+	// --- Then ---
+	assert.ErrorIs(t, err, ErrOutOfBounds)
+	assert.Nil(t, buf)
+}
+
 func Test_With_Append(t *testing.T) {
 	// --- When ---
 	buf, err := With([]byte{0, 1, 2}, Append)
@@ -552,6 +570,28 @@ func Test_Buffer_Read_WithSmallBuffer(t *testing.T) {
 	assert.NoError(t, buf.Close())
 }
 
+func Test_Buffer_Read_BeyondLen(t *testing.T) {
+	// --- Given ---
+	buf, err := With([]byte{0, 1, 2})
+	require.NoError(t, err)
+	_, err = buf.Seek(5, io.SeekStart)
+	require.NoError(t, err)
+
+	// --- When ---
+	dst := make([]byte, 3)
+	n, err := buf.Read(dst)
+
+	// --- Then ---
+	assert.ErrorIs(t, err, io.EOF)
+	assert.Exactly(t, 0, n)
+	assert.Exactly(t, 5, buf.Offset())
+	assert.Exactly(t, 3, buf.Len())
+	assert.Exactly(t, 3, buf.Cap())
+	want := []byte{0, 0, 0}
+	assert.Exactly(t, want, dst)
+	assert.NoError(t, buf.Close())
+}
+
 func Test_Buffer_Read(t *testing.T) {
 	tt := []struct {
 		testN string
@@ -818,4 +858,17 @@ func Test_Buffer_Seek_NegativeFinalOffset(t *testing.T) {
 	// --- Then ---
 	assert.ErrorIs(t, err, os.ErrInvalid)
 	assert.Exactly(t, int64(0), n)
+}
+
+func Test_Buffer_Seek_BeyondLen(t *testing.T) {
+	// --- Given ---
+	buf, err := With([]byte{0, 1, 2})
+	require.NoError(t, err)
+
+	// --- When ---
+	n, err := buf.Seek(5, io.SeekStart)
+
+	// --- Then ---
+	assert.NoError(t, err)
+	assert.Exactly(t, int64(5), n)
 }
