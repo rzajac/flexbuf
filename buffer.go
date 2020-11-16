@@ -111,6 +111,24 @@ func (b *Buffer) Read(p []byte) (int, error) {
 	return n, io.EOF
 }
 
+// ReadAt reads len(p) bytes from the buffer starting at byte offset off.
+// It returns the number of bytes read and the error, if any.
+// ReadAt always returns a non-nil error when n < len(p). It does not
+// change the offset.
+func (b *Buffer) ReadAt(p []byte, off int64) (int, error) {
+	if off >= int64(len(b.buf)) {
+		return 0, ErrOutOfBounds
+	}
+	prev := b.off
+	defer func() { b.off = prev }()
+	b.off = int(off)
+	n, err := b.Read(p)
+	if err != nil {
+		return n, err
+	}
+	return n, nil
+}
+
 // ReadFrom reads data from r until EOF and appends it to the buffer at b.off,
 // growing the buffer as needed. The return value is the number of bytes read.
 // Any error except io.EOF encountered during the read is also returned. If the

@@ -577,6 +577,18 @@ func Test_Buffer_Read(t *testing.T) {
 			expDst: []byte{0, 1, 2},
 		},
 		{
+			testN:  "read all with big buffer",
+			init:   []byte{0, 1, 2},
+			opts:   nil,
+			dst:    make([]byte, 6),
+			expN:   3,
+			expErr: io.EOF,
+			expOff: 3,
+			expLen: 3,
+			expCap: 3,
+			expDst: []byte{0, 1, 2, 0, 0, 0},
+		},
+		{
 			testN:  "read head",
 			init:   []byte{0, 1, 2},
 			opts:   nil,
@@ -622,6 +634,120 @@ func Test_Buffer_Read(t *testing.T) {
 
 			// --- When ---
 			n, err := buf.Read(tc.dst)
+
+			// --- Then ---
+			if tc.expErr == nil {
+				assert.NoError(t, err, "test %s", tc.testN)
+			} else {
+				assert.ErrorIs(t, err, tc.expErr, "test %s", tc.testN)
+			}
+			assert.Exactly(t, tc.expN, n, "test %s", tc.testN)
+			assert.Exactly(t, tc.expOff, buf.Offset(), "test %s", tc.testN)
+			assert.Exactly(t, tc.expLen, buf.Len(), "test %s", tc.testN)
+			assert.Exactly(t, tc.expCap, buf.Cap(), "test %s", tc.testN)
+			assert.Exactly(t, tc.expDst, tc.dst, "test %s", tc.testN)
+			assert.NoError(t, buf.Close(), "test %s", tc.testN)
+		})
+	}
+}
+
+func Test_Buffer_ReadAt_BeyondLen(t *testing.T) {
+	// --- Given ---
+	buf, err := With([]byte{0, 1, 2})
+	require.NoError(t, err)
+
+	// --- When ---
+	dst := make([]byte, 4)
+	n, err := buf.ReadAt(dst, 6)
+
+	// --- Then ---
+	assert.ErrorIs(t, err, ErrOutOfBounds)
+	assert.Exactly(t, 0, n)
+	assert.Exactly(t, 0, buf.Offset())
+	assert.Exactly(t, 3, buf.Len())
+	assert.Exactly(t, 3, buf.Cap())
+	want := []byte{0, 0, 0, 0}
+	assert.Exactly(t, want, dst)
+	assert.NoError(t, buf.Close())
+}
+
+func Test_Buffer_ReadAt(t *testing.T) {
+	tt := []struct {
+		testN string
+
+		init   []byte
+		opts   []func(*Buffer) error
+		dst    []byte
+		off    int64
+		expN   int
+		expErr error
+		expOff int
+		expLen int
+		expCap int
+		expDst []byte
+	}{
+		{
+			testN:  "read all",
+			init:   []byte{0, 1, 2},
+			opts:   []func(*Buffer) error{Offset(1)},
+			dst:    make([]byte, 3),
+			off:    0,
+			expN:   3,
+			expErr: io.EOF,
+			expOff: 1,
+			expLen: 3,
+			expCap: 3,
+			expDst: []byte{0, 1, 2},
+		},
+		{
+			testN:  "read all with big buffer",
+			init:   []byte{0, 1, 2},
+			opts:   []func(*Buffer) error{Offset(1)},
+			dst:    make([]byte, 6),
+			off:    0,
+			expN:   3,
+			expErr: io.EOF,
+			expOff: 1,
+			expLen: 3,
+			expCap: 3,
+			expDst: []byte{0, 1, 2, 0, 0, 0},
+		},
+		{
+			testN:  "read head",
+			init:   []byte{0, 1, 2},
+			opts:   []func(*Buffer) error{Offset(1)},
+			dst:    make([]byte, 2, 3),
+			off:    0,
+			expN:   2,
+			expErr: nil,
+			expOff: 1,
+			expLen: 3,
+			expCap: 3,
+			expDst: []byte{0, 1},
+		},
+		{
+			testN:  "read tail",
+			init:   []byte{0, 1, 2},
+			opts:   []func(*Buffer) error{Offset(2)},
+			dst:    make([]byte, 2, 3),
+			off:    1,
+			expN:   2,
+			expErr: io.EOF,
+			expOff: 2,
+			expLen: 3,
+			expCap: 3,
+			expDst: []byte{1, 2},
+		},
+	}
+
+	for _, tc := range tt {
+		t.Run(tc.testN, func(t *testing.T) {
+			// --- Given ---
+			buf, err := With(tc.init, tc.opts...)
+			require.NoError(t, err)
+
+			// --- When ---
+			n, err := buf.ReadAt(tc.dst, tc.off)
 
 			// --- Then ---
 			if tc.expErr == nil {
