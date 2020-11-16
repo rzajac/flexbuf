@@ -1,3 +1,17 @@
+// Package flexbuf provides bytes buffer implementing many data access and
+// manipulation interfaces.
+//
+//    io.Writer
+//    io.WriterAt
+//    io.Reader
+//    io.ReaderAt
+//    io.ReaderFrom
+//    io.Seeker
+//
+// Additionally, `flexbuf` provides `Truncate(size int64) error` method to make
+// it almost a drop in replacement for `os.File`.
+//
+
 package flexbuf
 
 import (
