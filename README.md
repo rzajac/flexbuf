@@ -1,4 +1,4 @@
-# Flexible bytes buffer.
+## Flexible bytes buffer.
 
 [![Go Report Card](https://goreportcard.com/badge/github.com/rzajac/flexbuf)](https://goreportcard.com/report/github.com/rzajac/flexbuf)
 [![GoDoc](https://img.shields.io/badge/api-Godoc-blue.svg)](https://pkg.go.dev/github.com/rzajac/flexbuf)
@@ -21,13 +21,13 @@ The `flexbuf.Buffer` also uses `sync.Pool` so when you create a lot of buffers
 it will reuse buffers from the pool - see [flexbuf.New](https://pkg.go.dev/github.com/rzajac/flexbuf#New)
 constructor.
 
-# Installation.
+## Installation.
 
 ```
 go get github.com/rzajac/zrr
 ```
 
-# Examples
+## Examples
 
 ```
 buf := &flexbuf.Buffer{}
@@ -43,7 +43,7 @@ fmt.Println(data)
 // Output: [0 1 4 5]
 ```
 
-# How is it different from `bytes.Buffer`?
+## How is it different from `bytes.Buffer`?
 
 The `bytes.Buffer` always reads from current offset and writes to the end of 
 the buffer, `flexbuf` behaves more like a file it reads and writes at current 
@@ -58,7 +58,7 @@ or methods:
 
 - `Truncate`
 
-# Can I use `flexbuf.Buffer` as a replacement for `os.File`?
+## Can I use `flexbuf.Buffer` as a replacement for `os.File`?
 
 It depends. Even though `flexbuf.Buffer` probably implements all the methods 
 you need to use it as a replacement for `os.File` there are some minor 
@@ -68,6 +68,6 @@ differences:
 - `WriteAt` will not return error when used on an instance created with
     `flexbuf.New(flexbuf.Append)` or `flexbuf.With(myBuf, flexbuf.Append)`.
 
-# License
+## License
 
 BSD-2-Clause
