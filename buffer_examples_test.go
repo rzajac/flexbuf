@@ -10,10 +10,11 @@ import (
 
 func ExampleBuffer() {
 	buf := &flexbuf.Buffer{}
-	buf.Write([]byte{0, 1, 2, 3})
-	buf.Seek(-2, io.SeekEnd)
-	buf.Write([]byte{4, 5})
-	buf.Seek(0, io.SeekStart)
+
+	_, _ = buf.Write([]byte{0, 1, 2, 3})
+	_, _ = buf.Seek(-2, io.SeekEnd)
+	_, _ = buf.Write([]byte{4, 5})
+	_, _ = buf.Seek(0, io.SeekStart)
 
 	data, _ := ioutil.ReadAll(buf)
 	fmt.Println(data)

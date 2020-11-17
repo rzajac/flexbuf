@@ -65,6 +65,8 @@ type Buffer struct {
 // New returns new instance of the Buffer. The difference between New and
 // using zero value buffer is that New will get the initial buffer from
 // the pool.
+// When buffer is no longer needed you must call Close
+// to release it back to the pool.
 func New(opts ...func(buffer *Buffer) error) (*Buffer, error) {
 	buf := pool.Get().([]byte)[:0]
 	b, err := With(buf, opts...)
@@ -311,11 +313,13 @@ func (b *Buffer) Cap() int {
 // pool it is zeroed out and put back to the pool. It always returns nil error.
 func (b *Buffer) Close() error {
 	b.off = 0
+
 	if !b.external {
 		zeroOutSlice(b.buf)
 		pool.Put(b.buf)
-	} else {
-		b.buf = nil
+		return nil
 	}
+
+	b.buf = nil
 	return nil
 }
