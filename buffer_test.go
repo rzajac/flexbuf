@@ -26,6 +26,7 @@ func Test_With(t *testing.T) {
 
 	// --- Then ---
 	assert.NoError(t, err)
+	assert.Exactly(t, 0, buf.flag)
 	assert.Exactly(t, 0, buf.off)
 	assert.Exactly(t, []byte{0, 1, 2}, buf.buf)
 }
@@ -36,6 +37,7 @@ func Test_With_Offset(t *testing.T) {
 
 	// --- Then ---
 	assert.NoError(t, err)
+	assert.Exactly(t, 0, buf.flag)
 	assert.Exactly(t, 1, buf.off)
 	assert.Exactly(t, []byte{0, 1, 2}, buf.buf)
 }
@@ -64,6 +66,7 @@ func Test_With_Append(t *testing.T) {
 
 	// --- Then ---
 	assert.NoError(t, err)
+	assert.Exactly(t, os.O_APPEND, buf.flag)
 	assert.Exactly(t, 3, buf.off)
 	assert.Exactly(t, []byte{0, 1, 2}, buf.buf)
 }
@@ -568,8 +571,19 @@ func Test_Buffer_Read_WithSmallBuffer(t *testing.T) {
 	// Second read.
 	n, err = buf.Read(dst)
 
-	assert.ErrorIs(t, err, io.EOF)
+	assert.NoError(t, err)
 	assert.Exactly(t, 2, n)
+	assert.Exactly(t, 5, buf.Offset())
+	assert.Exactly(t, 5, buf.Len())
+	assert.Exactly(t, 5, buf.Cap())
+	want = []byte{3, 4, 2}
+	assert.Exactly(t, want, dst)
+
+	// Third read.
+	n, err = buf.Read(dst)
+
+	assert.ErrorIs(t, err, io.EOF)
+	assert.Exactly(t, 0, n)
 	assert.Exactly(t, 5, buf.Offset())
 	assert.Exactly(t, 5, buf.Len())
 	assert.Exactly(t, 5, buf.Cap())
@@ -601,6 +615,26 @@ func Test_Buffer_Read_BeyondLen(t *testing.T) {
 	assert.NoError(t, buf.Close())
 }
 
+func Test_Buffer_Read_BigBuffer(t *testing.T) {
+	// --- Given ---
+	buf, err := With([]byte{0, 1, 2})
+	require.NoError(t, err)
+
+	// --- When ---
+	dst := make([]byte, 6)
+	n, err := buf.Read(dst)
+
+	// --- Then ---
+	assert.NoError(t, err)
+	assert.Exactly(t, 3, n)
+	assert.Exactly(t, 3, buf.Offset())
+	assert.Exactly(t, 3, buf.Len())
+	assert.Exactly(t, 3, buf.Cap())
+	want := []byte{0, 1, 2, 0, 0, 0}
+	assert.Exactly(t, want, dst)
+	assert.NoError(t, buf.Close())
+}
+
 func Test_Buffer_Read(t *testing.T) {
 	tt := []struct {
 		testN string
@@ -609,7 +643,6 @@ func Test_Buffer_Read(t *testing.T) {
 		opts   []func(*Buffer) error
 		dst    []byte
 		expN   int
-		expErr error
 		expOff int
 		expLen int
 		expCap int
@@ -621,23 +654,10 @@ func Test_Buffer_Read(t *testing.T) {
 			opts:   nil,
 			dst:    make([]byte, 3, 3),
 			expN:   3,
-			expErr: io.EOF,
 			expOff: 3,
 			expLen: 3,
 			expCap: 3,
 			expDst: []byte{0, 1, 2},
-		},
-		{
-			testN:  "read all with big buffer",
-			init:   []byte{0, 1, 2},
-			opts:   nil,
-			dst:    make([]byte, 6),
-			expN:   3,
-			expErr: io.EOF,
-			expOff: 3,
-			expLen: 3,
-			expCap: 3,
-			expDst: []byte{0, 1, 2, 0, 0, 0},
 		},
 		{
 			testN:  "read head",
@@ -645,7 +665,6 @@ func Test_Buffer_Read(t *testing.T) {
 			opts:   nil,
 			dst:    make([]byte, 2, 3),
 			expN:   2,
-			expErr: nil,
 			expOff: 2,
 			expLen: 3,
 			expCap: 3,
@@ -657,23 +676,10 @@ func Test_Buffer_Read(t *testing.T) {
 			opts:   []func(*Buffer) error{Offset(1)},
 			dst:    make([]byte, 2, 3),
 			expN:   2,
-			expErr: io.EOF,
 			expOff: 3,
 			expLen: 3,
 			expCap: 3,
 			expDst: []byte{1, 2},
-		},
-		{
-			testN:  "read all with bigger buffer",
-			init:   []byte{0, 1, 2},
-			opts:   nil,
-			dst:    make([]byte, 6),
-			expN:   3,
-			expErr: io.EOF,
-			expOff: 3,
-			expLen: 3,
-			expCap: 3,
-			expDst: []byte{0, 1, 2, 0, 0, 0},
 		},
 	}
 
@@ -687,11 +693,7 @@ func Test_Buffer_Read(t *testing.T) {
 			n, err := buf.Read(tc.dst)
 
 			// --- Then ---
-			if tc.expErr == nil {
-				assert.NoError(t, err, "test %s", tc.testN)
-			} else {
-				assert.ErrorIs(t, err, tc.expErr, "test %s", tc.testN)
-			}
+			assert.NoError(t, err, "test %s", tc.testN)
 			assert.Exactly(t, tc.expN, n, "test %s", tc.testN)
 			assert.Exactly(t, tc.expOff, buf.Offset(), "test %s", tc.testN)
 			assert.Exactly(t, tc.expLen, buf.Len(), "test %s", tc.testN)
@@ -712,12 +714,32 @@ func Test_Buffer_ReadAt_BeyondLen(t *testing.T) {
 	n, err := buf.ReadAt(dst, 6)
 
 	// --- Then ---
-	assert.ErrorIs(t, err, ErrOutOfBounds)
+	assert.ErrorIs(t, err, io.EOF)
 	assert.Exactly(t, 0, n)
 	assert.Exactly(t, 0, buf.Offset())
 	assert.Exactly(t, 3, buf.Len())
 	assert.Exactly(t, 3, buf.Cap())
 	want := []byte{0, 0, 0, 0}
+	assert.Exactly(t, want, dst)
+	assert.NoError(t, buf.Close())
+}
+
+func Test_Buffer_ReadAt_BigBuffer(t *testing.T) {
+	// --- Given ---
+	buf, err := With([]byte{0, 1, 2}, Offset(1))
+	require.NoError(t, err)
+	dst := make([]byte, 4)
+
+	// --- When ---
+	n, err := buf.ReadAt(dst, 0)
+
+	// --- Then ---
+	assert.ErrorIs(t, err, io.EOF)
+	assert.Exactly(t, 3, n)
+	assert.Exactly(t, 1, buf.Offset())
+	assert.Exactly(t, 3, buf.Len())
+	assert.Exactly(t, 3, buf.Cap())
+	want := []byte{0, 1, 2, 0}
 	assert.Exactly(t, want, dst)
 	assert.NoError(t, buf.Close())
 }
@@ -731,7 +753,6 @@ func Test_Buffer_ReadAt(t *testing.T) {
 		dst    []byte
 		off    int64
 		expN   int
-		expErr error
 		expOff int
 		expLen int
 		expCap int
@@ -744,24 +765,10 @@ func Test_Buffer_ReadAt(t *testing.T) {
 			dst:    make([]byte, 3),
 			off:    0,
 			expN:   3,
-			expErr: io.EOF,
 			expOff: 1,
 			expLen: 3,
 			expCap: 3,
 			expDst: []byte{0, 1, 2},
-		},
-		{
-			testN:  "read all with big buffer",
-			init:   []byte{0, 1, 2},
-			opts:   []func(*Buffer) error{Offset(1)},
-			dst:    make([]byte, 6),
-			off:    0,
-			expN:   3,
-			expErr: io.EOF,
-			expOff: 1,
-			expLen: 3,
-			expCap: 3,
-			expDst: []byte{0, 1, 2, 0, 0, 0},
 		},
 		{
 			testN:  "read head",
@@ -770,7 +777,6 @@ func Test_Buffer_ReadAt(t *testing.T) {
 			dst:    make([]byte, 2, 3),
 			off:    0,
 			expN:   2,
-			expErr: nil,
 			expOff: 1,
 			expLen: 3,
 			expCap: 3,
@@ -783,7 +789,6 @@ func Test_Buffer_ReadAt(t *testing.T) {
 			dst:    make([]byte, 2, 3),
 			off:    1,
 			expN:   2,
-			expErr: io.EOF,
 			expOff: 2,
 			expLen: 3,
 			expCap: 3,
@@ -801,11 +806,7 @@ func Test_Buffer_ReadAt(t *testing.T) {
 			n, err := buf.ReadAt(tc.dst, tc.off)
 
 			// --- Then ---
-			if tc.expErr == nil {
-				assert.NoError(t, err, "test %s", tc.testN)
-			} else {
-				assert.ErrorIs(t, err, tc.expErr, "test %s", tc.testN)
-			}
+			assert.NoError(t, err, "test %s", tc.testN)
 			assert.Exactly(t, tc.expN, n, "test %s", tc.testN)
 			assert.Exactly(t, tc.expOff, buf.Offset(), "test %s", tc.testN)
 			assert.Exactly(t, tc.expLen, buf.Len(), "test %s", tc.testN)
@@ -816,7 +817,7 @@ func Test_Buffer_ReadAt(t *testing.T) {
 	}
 }
 
-func Test_Seek(t *testing.T) {
+func Test_Buffer_Seek(t *testing.T) {
 	// --- Given ---
 	tt := []struct {
 		testN string
@@ -941,6 +942,8 @@ func Test_Buffer_Truncate_BeyondLenAndWrite(t *testing.T) {
 	// --- Given ---
 	buf, err := With([]byte{0, 1, 2, 3}, Append)
 	require.NoError(t, err)
+	_, err = buf.Seek(1, io.SeekStart)
+	require.NoError(t, err)
 
 	// --- When ---
 	assert.NoError(t, buf.Truncate(8))
@@ -949,10 +952,10 @@ func Test_Buffer_Truncate_BeyondLenAndWrite(t *testing.T) {
 	// --- Then ---
 	assert.NoError(t, err)
 	assert.Exactly(t, 2, n)
-	assert.Exactly(t, 6, buf.Offset())
-	assert.Exactly(t, 8, buf.Len())
-	assert.Exactly(t, 8, buf.Cap())
-	assert.Exactly(t, []byte{0, 1, 2, 3, 4, 5, 0, 0}, buf.buf)
+	assert.Exactly(t, 10, buf.Offset())
+	assert.Exactly(t, 10, buf.Len())
+	assert.Exactly(t, 10, buf.Cap())
+	assert.Exactly(t, []byte{0, 1, 2, 3, 0, 0, 0, 0, 4, 5}, buf.buf)
 	assert.NoError(t, buf.Close())
 }
 
@@ -973,10 +976,11 @@ func Test_Buffer_Truncate_BeyondCapAndWrite(t *testing.T) {
 	// --- Then ---
 	assert.NoError(t, err)
 	assert.Exactly(t, 2, n)
-	assert.Exactly(t, 6, buf.Offset())
-	assert.Exactly(t, 10, buf.Len())
-	assert.Exactly(t, 10, buf.Cap())
-	assert.Exactly(t, []byte{0, 1, 2, 3, 4, 5, 0, 0, 0, 0}, buf.buf)
+	assert.Exactly(t, 12, buf.Offset())
+	assert.Exactly(t, 12, buf.Len())
+	assert.Exactly(t, 12, buf.Cap())
+	want := []byte{0, 1, 2, 3, 0, 0, 0, 0, 0, 0, 4, 5}
+	assert.Exactly(t, want, buf.buf)
 	assert.NoError(t, buf.Close())
 }
 
@@ -993,10 +997,10 @@ func Test_Buffer_Truncate_ExtendBeyondLenResetAndWrite(t *testing.T) {
 	// --- Then ---
 	assert.NoError(t, err)
 	assert.Exactly(t, 2, n)
-	assert.Exactly(t, 6, buf.Offset())
-	assert.Exactly(t, 6, buf.Len())
+	assert.Exactly(t, 2, buf.Offset())
+	assert.Exactly(t, 2, buf.Len())
 	assert.Exactly(t, 8, buf.Cap())
-	assert.Exactly(t, []byte{0, 0, 0, 0, 4, 5}, buf.buf)
+	assert.Exactly(t, []byte{4, 5}, buf.buf)
 	assert.NoError(t, buf.Close())
 }
 

@@ -47,6 +47,7 @@ func Offset(off int) func(*Buffer) error {
 // to the end of the buffer. Append should be the last option on the
 // option list.
 func Append(buf *Buffer) error {
+	buf.flag |= os.O_APPEND
 	buf.off = len(buf.buf)
 	return nil
 }
@@ -54,6 +55,9 @@ func Append(buf *Buffer) error {
 // A Buffer is a variable-sized buffer of bytes.
 // The zero value for Buffer is an empty buffer ready to use.
 type Buffer struct {
+	// Flags passed when creating the Buffer.
+	// Flags are used to match behaviour of the Buffer to os.File.
+	flag int
 	// Set to false when underlying buffer was allocated from the pool.
 	external bool
 	// Current offset for read and write operations.
@@ -130,10 +134,7 @@ func (b *Buffer) Read(p []byte) (int, error) {
 	}
 	n := copy(p, b.buf[b.off:])
 	b.off += n
-	if len(b.buf[b.off:]) > 0 {
-		return n, nil
-	}
-	return n, io.EOF
+	return n, nil
 }
 
 // ReadAt reads len(p) bytes from the buffer starting at byte offset off.
@@ -142,7 +143,7 @@ func (b *Buffer) Read(p []byte) (int, error) {
 // change the offset.
 func (b *Buffer) ReadAt(p []byte, off int64) (int, error) {
 	if off >= int64(len(b.buf)) {
-		return 0, ErrOutOfBounds
+		return 0, io.EOF
 	}
 	prev := b.off
 	defer func() { b.off = prev }()
@@ -150,6 +151,9 @@ func (b *Buffer) ReadAt(p []byte, off int64) (int, error) {
 	n, err := b.Read(p)
 	if err != nil {
 		return n, err
+	}
+	if n < len(p) {
+		return n, io.EOF
 	}
 	return n, nil
 }
@@ -229,12 +233,18 @@ func (b *Buffer) Truncate(size int64) error {
 	// Extend the size of the buffer.
 	if int(size) > len(b.buf) {
 		b.grow(int(size) - len(b.buf))
+		if b.flag&os.O_APPEND != 0 {
+			b.off = int(size)
+		}
 		return nil
 	}
 
 	// Reduce the size of the buffer.
 	zeroOutSlice(b.buf[size:])
 	b.buf = b.buf[:size]
+	if b.flag&os.O_APPEND != 0 {
+		b.off = int(size)
+	}
 
 	return nil
 }
