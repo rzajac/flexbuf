@@ -104,6 +104,12 @@ func (b *Buffer) Write(p []byte) (int, error) {
 	return b.write(p), nil
 }
 
+// WriteByte writes single byte c to the buffer.
+func (b *Buffer) WriteByte(c byte) error {
+	b.write([]byte{c})
+	return nil
+}
+
 // write writes p at offset b.off.
 func (b *Buffer) write(p []byte) int {
 	b.grow(len(p))
@@ -135,6 +141,19 @@ func (b *Buffer) Read(p []byte) (int, error) {
 	n := copy(p, b.buf[b.off:])
 	b.off += n
 	return n, nil
+}
+
+// ReadByte reads and returns the next byte from the buffer or
+// any error encountered. If ReadByte returns an error, no input
+// byte was consumed, and the returned byte value is undefined.
+func (b *Buffer) ReadByte() (byte, error) {
+	// Nothing more to read.
+	if b.off >= len(b.buf) {
+		return 0, io.EOF
+	}
+	v := b.buf[b.off]
+	b.off++
+	return v, nil
 }
 
 // ReadAt reads len(p) bytes from the buffer starting at byte offset off.

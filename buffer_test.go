@@ -387,6 +387,24 @@ func Test_Buffer_Write(t *testing.T) {
 	}
 }
 
+func Test_Buffer_WriteByte(t *testing.T) {
+	// --- Given ---
+	buf, err := With([]byte{0, 1, 2}, Offset(1))
+	require.NoError(t, err)
+
+	// --- When ---
+	err = buf.WriteByte(3)
+
+	// --- Then ---
+	assert.NoError(t, err)
+	assert.Exactly(t, 2, buf.Offset())
+	assert.Exactly(t, 3, buf.Len())
+	assert.Exactly(t, 3, buf.Cap())
+	want := []byte{0, 3, 2}
+	assert.Exactly(t, want, buf.buf)
+	assert.NoError(t, buf.Close())
+}
+
 func Test_Buffer_WriteAt_ZeroValue(t *testing.T) {
 	// --- Given ---
 	buf := &Buffer{}
@@ -702,6 +720,40 @@ func Test_Buffer_Read(t *testing.T) {
 			assert.NoError(t, buf.Close(), "test %s", tc.testN)
 		})
 	}
+}
+
+func Test_Buffer_ReadByte(t *testing.T) {
+	// --- Given ---
+	buf, err := With([]byte{0, 1, 2}, Offset(2))
+	require.NoError(t, err)
+
+	// --- When ---
+	got, err := buf.ReadByte()
+
+	// --- Then ---
+	assert.NoError(t, err)
+	assert.Exactly(t, 3, buf.Offset())
+	assert.Exactly(t, 3, buf.Len())
+	assert.Exactly(t, 3, buf.Cap())
+	assert.Exactly(t, byte(2), got)
+	assert.NoError(t, buf.Close())
+}
+
+func Test_Buffer_ReadByte_EOF(t *testing.T) {
+	// --- Given ---
+	buf, err := With([]byte{0, 1, 2}, Offset(3))
+	require.NoError(t, err)
+
+	// --- When ---
+	got, err := buf.ReadByte()
+
+	// --- Then ---
+	assert.ErrorIs(t, err, io.EOF)
+	assert.Exactly(t, 3, buf.Offset())
+	assert.Exactly(t, 3, buf.Len())
+	assert.Exactly(t, 3, buf.Cap())
+	assert.Exactly(t, byte(0), got)
+	assert.NoError(t, buf.Close())
 }
 
 func Test_Buffer_ReadAt_BeyondLen(t *testing.T) {

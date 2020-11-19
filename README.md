@@ -1,4 +1,4 @@
-## Flexible bytes buffer.
+## Flexible bytes buffer
 
 [![Go Report Card](https://goreportcard.com/badge/github.com/rzajac/flexbuf)](https://goreportcard.com/report/github.com/rzajac/flexbuf)
 [![GoDoc](https://img.shields.io/badge/api-Godoc-blue.svg)](https://pkg.go.dev/github.com/rzajac/flexbuf)
@@ -8,7 +8,9 @@ manipulation interfaces.
 
     io.Writer
     io.WriterAt
+    io.ByteWriter
     io.Reader
+    io.ByteReader
     io.ReaderAt
     io.ReaderFrom
     io.Seeker
@@ -21,7 +23,7 @@ The `flexbuf.Buffer` also uses `sync.Pool` so when you create a lot of buffers
 it will reuse buffers from the pool - see [flexbuf.New](https://pkg.go.dev/github.com/rzajac/flexbuf#New)
 constructor.
 
-## Installation.
+## Installation
 
 ```
 go get github.com/rzajac/zrr
