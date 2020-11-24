@@ -1,12 +1,18 @@
 // Package flexbuf provides bytes buffer implementing many data access and
 // manipulation interfaces.
 //
-//    io.Writer
-//    io.WriterAt
-//    io.Reader
-//    io.ReaderAt
-//    io.ReaderFrom
-//    io.Seeker
+//     io.Writer
+//     io.WriterAt
+//     io.ByteWriter
+//     io.WriterTo
+//     io.StringWriter
+//     io.Reader
+//     io.ByteReader
+//     io.ReaderAt
+//     io.ReaderFrom
+//     io.Seeker
+//     io.Closer
+//     fmt.Stringer
 //
 // Additionally, `flexbuf` provides `Truncate(size int64) error` method to make
 // it almost a drop in replacement for `os.File`.
@@ -129,6 +135,21 @@ func (b *Buffer) WriteAt(p []byte, off int64) (int, error) {
 	return n, nil
 }
 
+// WriteTo writes data to w starting at current offset until there's no
+// more data to write or when an error occurs. The return value n is the
+// number of bytes written. Any error encountered during the write is
+// also returned.
+func (b *Buffer) WriteTo(w io.Writer) (int64, error) {
+	n, err := w.Write(b.buf[b.off:])
+	b.off += n
+	return int64(n), err
+}
+
+// WriteString writes string s to the buffer at current offset.
+func (b *Buffer) WriteString(s string) (int, error) {
+	return b.Write([]byte(s))
+}
+
 // Read reads the next len(p) bytes from the buffer or until the buffer
 // is drained. The return value is the number of bytes read. If the
 // buffer has no data to return, err is io.EOF (unless len(p) is zero);
@@ -217,6 +238,15 @@ func (b *Buffer) ReadFrom(r io.Reader) (int64, error) {
 			return int64(total), err
 		}
 	}
+}
+
+// String returns string representation of the buffer starting at current
+// offset. Calling this method is considered as reading the buffer and
+// advances offset to the end of the buffer.
+func (b *Buffer) String() string {
+	s := string(b.buf[b.off:])
+	b.off = len(b.buf)
+	return s
 }
 
 // Seek sets the offset for the next Read or Write on the buffer to offset,

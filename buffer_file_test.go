@@ -292,6 +292,21 @@ func Test_File_WriteAt(t *testing.T) {
 	}
 }
 
+func Test_File_WriteString(t *testing.T) {
+	// --- Given ---
+	buf := tmpFileData(t, os.O_RDWR, []byte{0, 1, 2})
+	mustSeek(buf, 1, io.SeekStart)
+
+	// --- When ---
+	n, err := buf.WriteString("abc")
+
+	// --- Then ---
+	assert.NoError(t, err)
+	assert.Exactly(t, 3, n)
+	assert.Exactly(t, []byte{0, 0x61, 0x62, 0x63}, mustReadWhole(buf))
+	assert.Exactly(t, int64(4), mustCurrOffset(buf))
+}
+
 func Test_File_Read_ZeroValue(t *testing.T) {
 	// --- Given ---
 	buf := tmpFile(t)

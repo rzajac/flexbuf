@@ -9,13 +9,16 @@ manipulation interfaces.
     io.Writer
     io.WriterAt
     io.ByteWriter
+    io.WriterTo
+    io.StringWriter
     io.Reader
     io.ByteReader
     io.ReaderAt
     io.ReaderFrom
     io.Seeker
     io.Closer
-    
+    fmt.Stringer
+
 Additionally, `flexbuf` provides `Truncate(size int64) error` method to make 
 it almost a drop in replacement for `os.File`.
 

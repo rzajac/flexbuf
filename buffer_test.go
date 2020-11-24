@@ -548,6 +548,53 @@ func Test_Buffer_WriteAt(t *testing.T) {
 	}
 }
 
+func Test_Buffer_WriteTo(t *testing.T) {
+	// --- Given ---
+	buf, err := With([]byte{0, 1, 2, 3}, Offset(1))
+	require.NoError(t, err)
+
+	// --- When ---
+	dst := &bytes.Buffer{}
+	n, err := buf.WriteTo(dst)
+
+	// --- Then ---
+	assert.NoError(t, err)
+	assert.Exactly(t, int64(3), n)
+	assert.Exactly(t, []byte{1, 2, 3}, dst.Bytes())
+	assert.Exactly(t, 4, buf.Offset())
+}
+
+func Test_Buffer_WriteTo_OffsetAtTheEnd(t *testing.T) {
+	// --- Given ---
+	buf, err := With([]byte{0, 1, 2, 3}, Offset(4))
+	require.NoError(t, err)
+
+	// --- When ---
+	dst := &bytes.Buffer{}
+	n, err := buf.WriteTo(dst)
+
+	// --- Then ---
+	assert.NoError(t, err)
+	assert.Exactly(t, int64(0), n)
+	assert.Exactly(t, []byte(nil), dst.Bytes())
+	assert.Exactly(t, 4, buf.Offset())
+}
+
+func Test_Buffer_WriteString(t *testing.T) {
+	// --- Given ---
+	buf, err := With([]byte{0, 1, 2}, Offset(1))
+	require.NoError(t, err)
+
+	// --- When ---
+	n, err := buf.WriteString("abc")
+
+	// --- Then ---
+	assert.NoError(t, err)
+	assert.Exactly(t, 3, n)
+	assert.Exactly(t, []byte{0, 0x61, 0x62, 0x63}, buf.buf)
+	assert.Exactly(t, 4, buf.Offset())
+}
+
 func Test_Buffer_Read_ZeroValue(t *testing.T) {
 	// --- Given ---
 	buf := &Buffer{}
@@ -867,6 +914,31 @@ func Test_Buffer_ReadAt(t *testing.T) {
 			assert.NoError(t, buf.Close(), "test %s", tc.testN)
 		})
 	}
+}
+
+func Test_Buffer_String(t *testing.T) {
+	// --- Given ---
+	buf, err := With([]byte{'A', 'B', 'C', 'D'}, Offset(1))
+	require.NoError(t, err)
+
+	// --- When ---
+	s := buf.String()
+
+	// --- Then ---
+	assert.Exactly(t, "BCD", s)
+	assert.Exactly(t, 4, buf.Offset())
+}
+
+func Test_Buffer_String_ZeroValueBuffer(t *testing.T) {
+	// --- Given ---
+	buf := &Buffer{}
+
+	// --- When ---
+	s := buf.String()
+
+	// --- Then ---
+	assert.Exactly(t, "", s)
+	assert.Exactly(t, 0, buf.Offset())
 }
 
 func Test_Buffer_Seek(t *testing.T) {
