@@ -352,6 +352,13 @@ func makeSlice(n int) []byte {
 	return make([]byte, n)
 }
 
+// zeroOutSlice zeroes out the byte slice.
+func zeroOutSlice(b []byte) {
+	for i := range b {
+		b[i] = 0
+	}
+}
+
 // Offset returns the current offset.
 func (b *Buffer) Offset() int {
 	return b.off

@@ -1158,3 +1158,22 @@ func Test_Buffer_Truncate_Error(t *testing.T) {
 	// --- Then ---
 	assert.ErrorIs(t, err, os.ErrInvalid)
 }
+
+func Test_Buffer_Close_ZeroValue(t *testing.T) {
+	// --- When ---
+	buf := &Buffer{}
+
+	// --- Then ---
+	assert.NoError(t, buf.Close())
+}
+
+func Test_helpers_zeroOutSlice(t *testing.T) {
+	// --- Given ---
+	data := []byte{0, 1, 2, 3}
+
+	// --- When ---
+	zeroOutSlice(data)
+
+	// --- Then ---
+	assert.Exactly(t, []byte{0, 0, 0, 0}, data)
+}
