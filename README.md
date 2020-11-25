@@ -22,10 +22,6 @@ manipulation interfaces.
 Additionally, `flexbuf` provides `Truncate(size int64) error` method to make 
 it almost a drop in replacement for `os.File`.
 
-The `flexbuf.Buffer` also uses `sync.Pool` so when you create a lot of buffers 
-it will reuse buffers from the pool - see [flexbuf.New](https://pkg.go.dev/github.com/rzajac/flexbuf#New)
-constructor.
-
 ## Installation
 
 ```

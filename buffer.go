@@ -25,18 +25,10 @@ import (
 	"errors"
 	"io"
 	"os"
-	"sync"
 )
 
 // ErrOutOfBounds is returned for invalid offsets.
 var ErrOutOfBounds = errors.New("offset out of bounds")
-
-// pool of byte buffers.
-var pool = sync.Pool{
-	New: func() interface{} {
-		return make([]byte, bytes.MinRead)
-	},
-}
 
 // Offset is the constructor option setting the initial buffer offset to off.
 func Offset(off int) func(*Buffer) error {
@@ -64,8 +56,6 @@ type Buffer struct {
 	// Flags passed when creating the Buffer.
 	// Flags are used to match behaviour of the Buffer to os.File.
 	flag int
-	// Set to false when underlying buffer was allocated from the pool.
-	external bool
 	// Current offset for read and write operations.
 	off int
 	// Underlying buffer.
@@ -73,25 +63,24 @@ type Buffer struct {
 }
 
 // New returns new instance of the Buffer. The difference between New and
-// using zero value buffer is that New will get the initial buffer from
-// the pool.
-// When buffer is no longer needed you must call Close
-// to release it back to the pool.
+// using zero value buffer is that New will initialize buffer with capacity
+// of bytes.MinRead.
 func New(opts ...func(buffer *Buffer) error) (*Buffer, error) {
-	buf := pool.Get().([]byte)[:0]
-	b, err := With(buf, opts...)
+	b, err := With(make([]byte, 0, bytes.MinRead), opts...)
 	if err != nil {
 		return nil, err
 	}
-	b.external = false
 	return b, err
 }
 
-// With creates new instance of Buffer initialized with data.
+// With creates new instance of Buffer initialized with data. The new Buffer
+// takes ownership of buf, and the caller should not use buf after this call.
+// NewBuffer is intended to prepare a Buffer to read existing data. It can
+// also be used to set the initial size of the internal buffer for writing.
+// To do that, buf should have the desired capacity but a length of zero.
 func With(data []byte, opts ...func(*Buffer) error) (*Buffer, error) {
 	b := &Buffer{
-		external: true,
-		buf:      data,
+		buf: data,
 	}
 
 	for _, opt := range opts {
@@ -204,6 +193,14 @@ func (b *Buffer) ReadAt(p []byte, off int64) (int, error) {
 // buffer becomes too large, ReadFrom will panic with ErrTooLarge.
 func (b *Buffer) ReadFrom(r io.Reader) (int64, error) {
 	var total int
+
+	// Because io.Read documentation says: "Even if Read returns
+	// n < len(p), it may use all of p as scratch space during the call."
+	// we can't pass our buffer to read because it might change parts of it
+	// not involved in read operation. We will use temporary bytes buffer
+	// for reading and then copy read bytes to actual buffer.
+	tmp := make([]byte, bytes.MinRead)
+
 	for {
 		// Length before growing the buffer.
 		l := len(b.buf)
@@ -211,17 +208,8 @@ func (b *Buffer) ReadFrom(r io.Reader) (int64, error) {
 		// Make sure we can fit MinRead between b.off and new buffer length.
 		b.grow(bytes.MinRead)
 
-		// Because io.Read documentation says: "Even if Read returns
-		// n < len(p), it may use all of p as scratch space during the call."
-		// we can't pass our buffer to read because it might change parts of it
-		// not involved in read operation. We will use temporary bytes buffer
-		// from the pool for reading and then copy read bytes to actual buffer.
-		tmp := pool.Get().([]byte)
-
 		n, err := r.Read(tmp)
 		copy(b.buf[b.off:], tmp[:n])
-		zeroOutSlice(tmp[:n])
-		pool.Put(tmp)
 
 		b.off += n
 		total += n
@@ -369,23 +357,17 @@ func (b *Buffer) Len() int {
 	return len(b.buf)
 }
 
-// Cap returns the capacity of the buffer's underlying byte slice, that is, the
-// total space allocated for the buffer's data.
+// Cap returns the capacity of the buffer's underlying byte slice, that is,
+// the total space allocated for the buffer's data.
 func (b *Buffer) Cap() int {
 	return cap(b.buf)
 }
 
-// Close sets offset to zero, if underlying buffer was allocated from the
-// pool it is zeroed out and put back to the pool. It always returns nil error.
+// Close sets offset to zero and zero put the buffer. It always returns
+// nil error.
 func (b *Buffer) Close() error {
 	b.off = 0
-
-	if !b.external {
-		zeroOutSlice(b.buf)
-		pool.Put(b.buf)
-		return nil
-	}
-
-	b.buf = nil
+	zeroOutSlice(b.buf[0:cap(b.buf)])
+	b.buf = b.buf[:0]
 	return nil
 }
