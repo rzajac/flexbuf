@@ -240,7 +240,7 @@ func (b *Buffer) String() string {
 // Seek sets the offset for the next Read or Write on the buffer to offset,
 // interpreted according to whence: 0 means relative to the origin of the file,
 // 1 means relative to the current offset, and 2 means relative to the end.
-// It returns the new offset and an error, if any.
+// It returns the new offset and an error (only if calculated offset < 0).
 func (b *Buffer) Seek(offset int64, whence int) (int64, error) {
 	var off int
 	switch whence {
