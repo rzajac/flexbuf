@@ -69,6 +69,21 @@ differences:
 - `WriteAt` will not return error when used on an instance created with
     `flexbuf.New(flexbuf.Append)` or `flexbuf.With(myBuf, flexbuf.Append)`.
 
+## Benchmarks
+
+Some benchmarks between `flexbuf.Buffer` and `bytes.Buffer`:
+
+```
+BenchmarkWrite/flexbuf-12          124060         11014 ns/op       32768 B/op           1 allocs/op
+BenchmarkWrite/bytes-12            101112         11767 ns/op       32768 B/op           1 allocs/op
+BenchmarkWriteByte/flexbuf-12    38088462          31.2 ns/op           1 B/op           1 allocs/op
+BenchmarkWriteByte/bytes-12      15355932          76.9 ns/op          64 B/op           1 allocs/op
+BenchmarkWriteString/flexbuf-12  18013146          63.8 ns/op          16 B/op           1 allocs/op
+BenchmarkWriteString/bytes-12    12852244          88.3 ns/op          64 B/op           1 allocs/op
+BenchmarkReadFrom/flexbuf-12        27813         43573 ns/op      129024 B/op           7 allocs/op
+BenchmarkReadFrom/bytes-12          27439         43440 ns/op      129024 B/op           7 allocs/op
+```
+
 ## License
 
 BSD-2-Clause

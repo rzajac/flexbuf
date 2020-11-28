@@ -268,6 +268,30 @@ func Test_File_WriteAt(t *testing.T) {
 			expLen: 4,
 			expBuf: []byte{0, 4, 5, 3},
 		},
+		{
+			testN:  "write at offset beyond cap",
+			init:   make([]byte, 3, 6),
+			flag:   os.O_RDWR,
+			seek:   0,
+			src:    []byte{1, 2},
+			off:    8,
+			expN:   2,
+			expOff: 0,
+			expLen: 10,
+			expBuf: []byte{0, 0, 0, 0, 0, 0, 0, 0, 1, 2},
+		},
+		{
+			testN:  "write at offset beyond cap, offset close to len",
+			init:   make([]byte, 5, 7),
+			flag:   os.O_RDWR,
+			seek:   4,
+			src:    []byte{1, 2},
+			off:    8,
+			expN:   2,
+			expOff: 4,
+			expLen: 10,
+			expBuf: []byte{0, 0, 0, 0, 0, 0, 0, 0, 1, 2},
+		},
 	}
 
 	for _, tc := range tt {

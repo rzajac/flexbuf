@@ -105,19 +105,21 @@ func (b *Buffer) WriteByte(c byte) error {
 	return nil
 }
 
-// write writes p at offset b.off.
-func (b *Buffer) write(p []byte) int {
-	b.grow(len(p))
-	n := copy(b.buf[b.off:], p)
-	b.off += n
-	return n
-}
-
 // WriteAt writes len(p) bytes to the buffer starting at byte offset off.
 // It returns the number of bytes written; err is always nil. It does not
 // change the offset.
 func (b *Buffer) WriteAt(p []byte, off int64) (int, error) {
 	prev := b.off
+	c := cap(b.buf)
+	pl := len(p)
+
+	// Handle write beyond capacity.
+	if int(off)+pl > c {
+		b.off = c // So tryGrowByReslice returns false.
+		b.grow(int(off) + pl - len(b.buf))
+		b.buf = b.buf[:int(off)+pl]
+	}
+
 	b.off = int(off)
 	n := b.write(p)
 	b.off = prev
@@ -137,6 +139,19 @@ func (b *Buffer) WriteTo(w io.Writer) (int64, error) {
 // WriteString writes string s to the buffer at current offset.
 func (b *Buffer) WriteString(s string) (int, error) {
 	return b.Write([]byte(s))
+}
+
+// write writes p at offset b.off.
+func (b *Buffer) write(p []byte) int {
+	l := len(b.buf)
+	b.grow(len(p))
+	n := copy(b.buf[b.off:], p)
+	b.off += n
+	if b.off > l {
+		l = b.off
+	}
+	b.buf = b.buf[:l]
+	return n
 }
 
 // Read reads the next len(p) bytes from the buffer or until the buffer
@@ -192,40 +207,58 @@ func (b *Buffer) ReadAt(p []byte, off int64) (int, error) {
 // Any error except io.EOF encountered during the read is also returned. If the
 // buffer becomes too large, ReadFrom will panic with ErrTooLarge.
 func (b *Buffer) ReadFrom(r io.Reader) (int64, error) {
-	var total int
-
-	// Because io.Read documentation says: "Even if Read returns
-	// n < len(p), it may use all of p as scratch space during the call."
-	// we can't pass our buffer to read because it might change parts of it
-	// not involved in read operation. We will use temporary bytes buffer
-	// for reading and then copy read bytes to actual buffer.
-	tmp := make([]byte, bytes.MinRead)
+	var err error
+	var n, total int
 
 	for {
+
 		// Length before growing the buffer.
 		l := len(b.buf)
 
 		// Make sure we can fit MinRead between b.off and new buffer length.
 		b.grow(bytes.MinRead)
 
-		n, err := r.Read(tmp)
-		copy(b.buf[b.off:], tmp[:n])
+		// We will use bytes between l and cap(b.buf) as a temporary
+		// scratch space for reading from r and then slide read bytes
+		// to place. We have to do it this way because io.Read documentation
+		// says that: "Even if Read returns n < len(p), it may use all of p
+		// as scratch space during the call." so we can't pass our buffer
+		// to Read because it might change parts of it not involved in
+		// read operation.
+		tmp := b.buf[l:cap(b.buf)]
+		n, err = r.Read(tmp)
+
+		if l != b.off {
+			// Move bytes from temporary area to correct place.
+			copy(b.buf[b.off:], tmp[:n])
+			if n < len(tmp) {
+				// Clean up any garbage reader might put in there and
+				// we want to keep all bytes between len and cap as zeros.
+				zeroOutSlice(tmp[n:])
+			}
+		}
 
 		b.off += n
 		total += n
 
-		// In case we have read less them MinRead bytes
-		// we have to set proper buffer length.
-		b.buf = b.buf[:l+n]
-
-		// The io.EOF is not an error.
-		if err == io.EOF {
-			return int64(total), nil
+		if b.off > l {
+			l = b.off
 		}
+
+		// Set proper buffer length.
+		b.buf = b.buf[:l]
+
 		if err != nil {
-			return int64(total), err
+			break
 		}
 	}
+
+	// The io.EOF is not an error.
+	if err == io.EOF {
+		return int64(total), nil
+	}
+
+	return int64(total), err
 }
 
 // String returns string representation of the buffer starting at current
@@ -261,24 +294,42 @@ func (b *Buffer) Seek(offset int64, whence int) (int64, error) {
 }
 
 // Truncate changes the size of the buffer discarding bytes at offsets greater
-// then size. It does not change the offset.
+// then size. It does not change the offset. It returns error os.ErrInvalid
+// only when when size is negative.
 func (b *Buffer) Truncate(size int64) error {
 	if size < 0 {
 		return os.ErrInvalid
 	}
 
-	// Extend the size of the buffer.
-	if int(size) > len(b.buf) {
-		b.grow(int(size) - len(b.buf))
-		if b.flag&os.O_APPEND != 0 {
-			b.off = int(size)
-		}
-		return nil
+	prev := b.off
+	l := len(b.buf)
+	c := cap(b.buf)
+
+	switch {
+	case int(size) == l:
+		// Nothing to do.
+
+	case int(size) == c:
+		// Reslice.
+		b.buf = b.buf[:size]
+
+	case int(size) > l && int(size) < c:
+		// Truncate between len and cap.
+		b.buf = b.buf[:size]
+
+	case int(size) > c:
+		// Truncate beyond cap.
+		b.off = c // So tryGrowByReslice returns false.
+		b.grow(int(size) - l)
+		b.buf = b.buf[:int(size)]
+
+	default:
+		// Reduce the size of the buffer.
+		zeroOutSlice(b.buf[size:])
+		b.buf = b.buf[:size]
 	}
 
-	// Reduce the size of the buffer.
-	zeroOutSlice(b.buf[size:])
-	b.buf = b.buf[:size]
+	b.off = prev
 	if b.flag&os.O_APPEND != 0 {
 		b.off = int(size)
 	}
@@ -312,18 +363,8 @@ func (b *Buffer) grow(n int) {
 		return
 	}
 
-	// The total capacity y of the buffer.
-	c := cap(b.buf)
-	// The real capacity of the buffer.
-	// We keep all the bytes before b.off when writing new bytes.
-	rc := c - b.off
-	// How much do we have to extend capacity to
-	// accommodate n additional bytes.
-	ex := c + n - rc
-
-	// Allocate buffer which is big enough for what we have
-	// in the buffer [0:b.off] and n additional bytes.
-	tmp := makeSlice(ex)
+	// Allocate bigger buffer.
+	tmp := makeSlice(cap(b.buf)*2 + n) // cap(b.buf) may be zero.
 	copy(tmp, b.buf)
 	b.buf = tmp
 }

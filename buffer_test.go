@@ -207,8 +207,8 @@ func Test_Buffer_grow(t *testing.T) {
 			cap:    100,
 			off:    5,
 			grow:   150,
-			expLen: 155,
-			expCap: 155,
+			expLen: 350,
+			expCap: 350,
 		},
 	}
 
@@ -230,83 +230,6 @@ func Test_Buffer_grow(t *testing.T) {
 	}
 }
 
-func Test_Buffer_ReadFrom_ToEmpty(t *testing.T) {
-	// --- Given ---
-	src := bytes.NewBuffer(bytes.Repeat([]byte{1, 2}, 500))
-	buf, err := New()
-	require.NoError(t, err)
-
-	// --- When ---
-	n, err := buf.ReadFrom(src)
-
-	// --- Then ---
-	assert.NoError(t, err)
-	assert.Exactly(t, int64(1000), n)
-	assert.Exactly(t, 1000, buf.Offset())
-	assert.Exactly(t, 1000, buf.Len())
-	assert.Exactly(t, 1512, buf.Cap())
-	assert.Exactly(t, bytes.Repeat([]byte{1, 2}, 500), buf.buf)
-	assert.NoError(t, buf.Close())
-}
-
-func Test_Buffer_ReadFrom_ToFull(t *testing.T) {
-	// --- Given ---
-	src := bytes.NewBuffer([]byte{3, 4, 5})
-	buf, err := With([]byte{0, 1, 2}, Append)
-	require.NoError(t, err)
-
-	// --- When ---
-	n, err := buf.ReadFrom(src)
-
-	// --- Then ---
-	assert.NoError(t, err)
-	assert.Exactly(t, int64(3), n)
-	assert.Exactly(t, 6, buf.Offset())
-	assert.Exactly(t, 6, buf.Len())
-	assert.Exactly(t, 518, buf.Cap())
-	want := []byte{0, 1, 2, 3, 4, 5}
-	assert.Exactly(t, want, buf.buf)
-	assert.NoError(t, buf.Close())
-}
-
-func Test_Buffer_Write_ZeroValue(t *testing.T) {
-	// --- Given ---
-	buf := &Buffer{}
-
-	// --- When ---
-	n, err := buf.Write([]byte{0, 1, 2})
-
-	// --- Then ---
-	assert.NoError(t, err)
-	assert.Exactly(t, 3, n)
-	assert.Exactly(t, 3, buf.Offset())
-	assert.Exactly(t, 3, buf.Len())
-	assert.Exactly(t, 3, buf.Cap())
-	want := []byte{0, 1, 2}
-	assert.Exactly(t, want, buf.buf)
-	assert.NoError(t, buf.Close())
-}
-
-func Test_Buffer_Write_OverrideAndExtend(t *testing.T) {
-	// --- Given ---
-	data := bytes.Repeat([]byte{0, 1}, 500)
-	buf, err := With([]byte{0, 1, 2}, Offset(1))
-	require.NoError(t, err)
-
-	// --- When ---
-	n, err := buf.Write(data)
-
-	// --- Then ---
-	assert.NoError(t, err)
-	assert.Exactly(t, 1000, n)
-	assert.Exactly(t, 1001, buf.Offset())
-	assert.Exactly(t, 1001, buf.Len())
-	assert.Exactly(t, 1001, buf.Cap())
-	want := append([]byte{0}, data...)
-	assert.Exactly(t, want, buf.buf)
-	assert.NoError(t, buf.Close())
-}
-
 func Test_Buffer_Write(t *testing.T) {
 	tt := []struct {
 		testN string
@@ -321,6 +244,50 @@ func Test_Buffer_Write(t *testing.T) {
 		expBuf []byte
 	}{
 		{
+			testN:  "zero value",
+			init:   nil,
+			opts:   nil,
+			src:    []byte{0, 1, 2},
+			expN:   3,
+			expOff: 3,
+			expLen: 3,
+			expCap: 3,
+			expBuf: []byte{0, 1, 2},
+		},
+		{
+			testN:  "empty with capacity",
+			init:   make([]byte, 0, 5),
+			opts:   nil,
+			src:    []byte{0, 1, 2},
+			expN:   3,
+			expOff: 3,
+			expLen: 3,
+			expCap: 5,
+			expBuf: []byte{0, 1, 2},
+		},
+		{
+			testN:  "empty with capacity write more then cap",
+			init:   make([]byte, 0, 5),
+			opts:   nil,
+			src:    []byte{0, 1, 2, 3, 4, 5},
+			expN:   6,
+			expOff: 6,
+			expLen: 6,
+			expCap: 16,
+			expBuf: []byte{0, 1, 2, 3, 4, 5},
+		},
+		{
+			testN:  "offset at len",
+			init:   []byte{0, 1, 2},
+			opts:   []func(*Buffer) error{Offset(3)},
+			src:    []byte{3, 4, 5},
+			expN:   3,
+			expOff: 6,
+			expLen: 6,
+			expCap: 9,
+			expBuf: []byte{0, 1, 2, 3, 4, 5},
+		},
+		{
 			testN:  "append",
 			init:   []byte{0, 1, 2},
 			opts:   []func(*Buffer) error{Append},
@@ -328,7 +295,7 @@ func Test_Buffer_Write(t *testing.T) {
 			expN:   3,
 			expOff: 6,
 			expLen: 6,
-			expCap: 6,
+			expCap: 9,
 			expBuf: []byte{0, 1, 2, 3, 4, 5},
 		},
 		{
@@ -339,8 +306,19 @@ func Test_Buffer_Write(t *testing.T) {
 			expN:   3,
 			expOff: 4,
 			expLen: 4,
-			expCap: 4,
+			expCap: 9,
 			expBuf: []byte{0, 3, 4, 5},
+		},
+		{
+			testN:  "override and extend big",
+			init:   []byte{0, 1, 2},
+			opts:   []func(*Buffer) error{Offset(1)},
+			src:    bytes.Repeat([]byte{0, 1}, 1<<20),
+			expN:   2 * 1 << 20,
+			expOff: 2*1<<20 + 1,
+			expLen: 2*1<<20 + 1,
+			expCap: 2*1<<20 + 6,
+			expBuf: append([]byte{0}, bytes.Repeat([]byte{0, 1}, 1<<20)...),
 		},
 		{
 			testN:  "override tail",
@@ -364,13 +342,31 @@ func Test_Buffer_Write(t *testing.T) {
 			expCap: 4,
 			expBuf: []byte{0, 4, 5, 3},
 		},
+		{
+			testN:  "override all no extend",
+			init:   []byte{0, 1, 2, 3},
+			opts:   nil,
+			src:    []byte{4, 5, 6, 7},
+			expN:   4,
+			expOff: 4,
+			expLen: 4,
+			expCap: 4,
+			expBuf: []byte{4, 5, 6, 7},
+		},
 	}
 
 	for _, tc := range tt {
 		t.Run(tc.testN, func(t *testing.T) {
 			// --- Given ---
-			buf, err := With(tc.init, tc.opts...)
-			require.NoError(t, err)
+			var buf *Buffer
+			var err error
+
+			if tc.init == nil {
+				buf = &Buffer{} // Test for zero value.
+			} else {
+				buf, err = With(tc.init, tc.opts...)
+				require.NoError(t, err)
+			}
 
 			// --- When ---
 			n, err := buf.Write(tc.src)
@@ -388,22 +384,350 @@ func Test_Buffer_Write(t *testing.T) {
 }
 
 func Test_Buffer_WriteByte(t *testing.T) {
-	// --- Given ---
-	buf, err := With([]byte{0, 1, 2}, Offset(1))
-	require.NoError(t, err)
+	tt := []struct {
+		testN string
 
-	// --- When ---
-	err = buf.WriteByte(3)
+		init   []byte
+		opts   []func(*Buffer) error
+		expOff int
+		expLen int
+		expCap int
+		expBuf []byte
+	}{
+		{
+			testN:  "zero value",
+			init:   nil,
+			opts:   nil,
+			expOff: 1,
+			expLen: 1,
+			expCap: 1,
+			expBuf: []byte{0xFF},
+		},
+		{
+			testN:  "empty with capacity",
+			init:   make([]byte, 0, 5),
+			opts:   nil,
+			expOff: 1,
+			expLen: 1,
+			expCap: 5,
+			expBuf: []byte{0xFF},
+		},
+		{
+			testN:  "offset at len",
+			init:   []byte{0, 1, 2},
+			opts:   []func(*Buffer) error{Offset(3)},
+			expOff: 4,
+			expLen: 4,
+			expCap: 7,
+			expBuf: []byte{0, 1, 2, 0xFF},
+		},
+		{
+			testN:  "append",
+			init:   []byte{0, 1, 2},
+			opts:   []func(*Buffer) error{Append},
+			expOff: 4,
+			expLen: 4,
+			expCap: 7,
+			expBuf: []byte{0, 1, 2, 0xFF},
+		},
+		{
+			testN:  "override tail",
+			init:   []byte{0, 1, 2},
+			opts:   []func(*Buffer) error{Offset(2)},
+			expOff: 3,
+			expLen: 3,
+			expCap: 3,
+			expBuf: []byte{0, 1, 0xFF},
+		},
+		{
+			testN:  "override middle",
+			init:   []byte{0, 1, 2, 3},
+			opts:   []func(*Buffer) error{Offset(1)},
+			expOff: 2,
+			expLen: 4,
+			expCap: 4,
+			expBuf: []byte{0, 0xFF, 2, 3},
+		},
+	}
 
-	// --- Then ---
-	assert.NoError(t, err)
-	assert.Exactly(t, 2, buf.Offset())
-	assert.Exactly(t, 3, buf.Len())
-	assert.Exactly(t, 3, buf.Cap())
-	want := []byte{0, 3, 2}
-	assert.Exactly(t, want, buf.buf)
-	assert.NoError(t, buf.Close())
+	for _, tc := range tt {
+		t.Run(tc.testN, func(t *testing.T) {
+			// --- Given ---
+			var buf *Buffer
+			var err error
+
+			if tc.init == nil {
+				buf = &Buffer{} // Test for zero value.
+			} else {
+				buf, err = With(tc.init, tc.opts...)
+				require.NoError(t, err)
+			}
+
+			// --- When ---
+			err = buf.WriteByte(0xFF)
+
+			// --- Then ---
+			assert.NoError(t, err, "test %s", tc.testN)
+			assert.Exactly(t, tc.expOff, buf.Offset(), "test %s", tc.testN)
+			assert.Exactly(t, tc.expLen, buf.Len(), "test %s", tc.testN)
+			assert.Exactly(t, tc.expCap, buf.Cap(), "test %s", tc.testN)
+			assert.Exactly(t, tc.expBuf, buf.buf, "test %s", tc.testN)
+			assert.NoError(t, buf.Close(), "test %s", tc.testN)
+		})
+	}
 }
+
+func Test_Buffer_WriteAt(t *testing.T) {
+	tt := []struct {
+		testN string
+
+		init   []byte
+		opts   []func(*Buffer) error
+		src    []byte
+		off    int64
+		expN   int
+		expOff int
+		expLen int
+		expCap int
+		expBuf []byte
+	}{
+		{
+			testN:  "zero value - write at zero offset",
+			init:   nil,
+			opts:   nil,
+			src:    []byte{0, 1, 2},
+			off:    0,
+			expN:   3,
+			expOff: 0,
+			expLen: 3,
+			expCap: 3,
+			expBuf: []byte{0, 1, 2},
+		},
+		{
+			testN:  "write at zero offset - override",
+			init:   []byte{0, 1, 2},
+			opts:   nil,
+			src:    []byte{3, 4, 5},
+			off:    0,
+			expN:   3,
+			expOff: 0,
+			expLen: 3,
+			expCap: 3,
+			expBuf: []byte{3, 4, 5},
+		},
+		{
+			testN:  "write at offset middle - no extend",
+			init:   []byte{0, 1, 2},
+			opts:   nil,
+			src:    []byte{3, 4},
+			off:    1,
+			expN:   2,
+			expOff: 0,
+			expLen: 3,
+			expCap: 3,
+			expBuf: []byte{0, 3, 4},
+		},
+		{
+			testN:  "write at offset middle - extend",
+			init:   []byte{0, 1, 2},
+			opts:   nil,
+			src:    []byte{3, 4, 5},
+			off:    1,
+			expN:   3,
+			expOff: 0,
+			expLen: 4,
+			expCap: 7,
+			expBuf: []byte{0, 3, 4, 5},
+		},
+		{
+			testN:  "append",
+			init:   []byte{0, 1, 2},
+			opts:   nil,
+			src:    []byte{3, 4, 5},
+			off:    3,
+			expN:   3,
+			expOff: 0,
+			expLen: 6,
+			expCap: 9,
+			expBuf: []byte{0, 1, 2, 3, 4, 5},
+		},
+		{
+			testN:  "write at offset beyond len - within cap",
+			init:   make([]byte, 3, 6),
+			opts:   nil,
+			src:    []byte{1, 2},
+			off:    4,
+			expN:   2,
+			expOff: 0,
+			expLen: 6,
+			expCap: 6,
+			expBuf: []byte{0, 0, 0, 0, 1, 2},
+		},
+		{
+			testN:  "write at offset beyond len - beyond cap",
+			init:   make([]byte, 3, 6),
+			opts:   nil,
+			src:    []byte{1, 2},
+			off:    5,
+			expN:   2,
+			expOff: 0,
+			expLen: 7,
+			expCap: 16,
+			expBuf: []byte{0, 0, 0, 0, 0, 1, 2},
+		},
+		{
+			testN:  "write at offset beyond cap",
+			init:   make([]byte, 3, 6),
+			opts:   nil,
+			src:    []byte{1, 2},
+			off:    8,
+			expN:   2,
+			expOff: 0,
+			expLen: 10,
+			expCap: 19,
+			expBuf: []byte{0, 0, 0, 0, 0, 0, 0, 0, 1, 2},
+		},
+		{
+			testN:  "write at offset beyond cap - offset close to len",
+			init:   make([]byte, 5, 7),
+			opts:   []func(*Buffer) error{Offset(4)},
+			src:    []byte{1, 2},
+			off:    8,
+			expN:   2,
+			expOff: 4,
+			expLen: 10,
+			expCap: 19,
+			expBuf: []byte{0, 0, 0, 0, 0, 0, 0, 0, 1, 2},
+		},
+	}
+
+	for _, tc := range tt {
+		t.Run(tc.testN, func(t *testing.T) {
+			// --- Given ---
+			var buf *Buffer
+			var err error
+
+			if tc.init == nil {
+				buf = &Buffer{} // Test for zero value.
+			} else {
+				buf, err = With(tc.init, tc.opts...)
+				require.NoError(t, err)
+			}
+
+			// --- When ---
+			n, err := buf.WriteAt(tc.src, tc.off)
+
+			// --- Then ---
+			assert.NoError(t, err, "test %s", tc.testN)
+			assert.Exactly(t, tc.expN, n, "test %s", tc.testN)
+			assert.Exactly(t, tc.expOff, buf.Offset(), "test %s", tc.testN)
+			assert.Exactly(t, tc.expLen, buf.Len(), "test %s", tc.testN)
+			assert.Exactly(t, tc.expCap, buf.Cap(), "test %s", tc.testN)
+			assert.Exactly(t, tc.expBuf, buf.buf, "test %s", tc.testN)
+			assert.NoError(t, buf.Close(), "test %s", tc.testN)
+		})
+	}
+}
+
+func Test_Buffer_ReadFrom(t *testing.T) {
+	tt := []struct {
+		testN string
+
+		init   []byte
+		opts   []func(*Buffer) error
+		src    []byte
+		expN   int64
+		expOff int
+		expLen int
+		expCap int
+		expBuf []byte
+	}{
+		{
+			testN:  "zero value",
+			init:   nil,
+			opts:   nil,
+			src:    bytes.Repeat([]byte{1, 2, 3}, 1<<9),
+			expN:   3 * 1 << 9,
+			expOff: 3 * 1 << 9,
+			expLen: 3 * 1 << 9,
+			expCap: 3584,
+			expBuf: bytes.Repeat([]byte{1, 2, 3}, 1<<9),
+		},
+		{
+			testN:  "append",
+			init:   []byte{0, 1, 2},
+			opts:   []func(*Buffer) error{Append},
+			src:    []byte{3, 4, 5},
+			expN:   3,
+			expOff: 6,
+			expLen: 6,
+			expCap: 518,
+			expBuf: []byte{0, 1, 2, 3, 4, 5},
+		},
+		{
+			testN:  "read up to len",
+			init:   make([]byte, 3, 6),
+			opts:   nil,
+			src:    []byte{0, 1, 2},
+			expN:   3,
+			expOff: 3,
+			expLen: 3,
+			expCap: 524,
+			expBuf: []byte{0, 1, 2},
+		},
+		{
+			testN:  "read up to cap",
+			init:   make([]byte, 3, 6),
+			opts:   []func(*Buffer) error{Append},
+			src:    []byte{3, 4, 5},
+			expN:   3,
+			expOff: 6,
+			expLen: 6,
+			expCap: 524,
+			expBuf: []byte{0, 0, 0, 3, 4, 5},
+		},
+		{
+			testN:  "use of tmp space",
+			init:   bytes.Repeat([]byte{0}, 50),
+			opts:   []func(*Buffer) error{Offset(25)},
+			src:    bytes.Repeat([]byte{1, 2, 3}, 1<<9),
+			expN:   3 * 1 << 9,
+			expOff: 3*1<<9 + 25,
+			expLen: 3*1<<9 + 25,
+			expCap: 3984,
+			expBuf: append(bytes.Repeat([]byte{0}, 25), bytes.Repeat([]byte{1, 2, 3}, 1<<9)...),
+		},
+	}
+
+	for _, tc := range tt {
+		t.Run(tc.testN, func(t *testing.T) {
+			// --- Given ---
+			var buf *Buffer
+			var err error
+
+			if tc.init == nil {
+				buf = &Buffer{} // Test for zero value.
+			} else {
+				buf, err = With(tc.init, tc.opts...)
+				require.NoError(t, err)
+			}
+
+			// --- When ---
+			n, err := buf.ReadFrom(bytes.NewReader(tc.src))
+
+			// --- Then ---
+			assert.NoError(t, err, "test %s", tc.testN)
+			assert.Exactly(t, tc.expN, n, "test %s", tc.testN)
+			assert.Exactly(t, tc.expOff, buf.Offset(), "test %s", tc.testN)
+			assert.Exactly(t, tc.expLen, buf.Len(), "test %s", tc.testN)
+			assert.Exactly(t, tc.expCap, buf.Cap(), "test %s", tc.testN)
+			assert.Exactly(t, tc.expBuf, buf.buf, "test %s", tc.testN)
+			assert.NoError(t, buf.Close(), "test %s", tc.testN)
+		})
+	}
+}
+
+// /////////////////////////////////////////////////////////////////////////////
 
 func Test_Buffer_WriteAt_ZeroValue(t *testing.T) {
 	// --- Given ---
@@ -437,7 +761,7 @@ func Test_Buffer_WriteAt_OverrideAndExtend(t *testing.T) {
 	assert.Exactly(t, 1000, n)
 	assert.Exactly(t, 0, buf.Offset())
 	assert.Exactly(t, 1001, buf.Len())
-	assert.Exactly(t, 1001, buf.Cap())
+	assert.Exactly(t, 1004, buf.Cap())
 	want := append([]byte{0}, bytes.Repeat([]byte{0, 1}, 500)...)
 	assert.Exactly(t, want, buf.buf)
 	assert.NoError(t, buf.Close())
@@ -456,96 +780,11 @@ func Test_Buffer_WriteAt_BeyondCap(t *testing.T) {
 	assert.Exactly(t, 3, n)
 	assert.Exactly(t, 0, buf.Offset())
 	assert.Exactly(t, 1003, buf.Len())
-	assert.Exactly(t, 1003, buf.Cap())
+	assert.Exactly(t, 1006, buf.Cap())
 	want := append([]byte{0, 1, 2}, bytes.Repeat([]byte{0}, 997)...)
 	want = append(want, []byte{3, 4, 5}...)
 	assert.Exactly(t, want, buf.buf)
 	assert.NoError(t, buf.Close())
-}
-
-func Test_Buffer_WriteAt(t *testing.T) {
-	tt := []struct {
-		testN string
-
-		init   []byte
-		opts   []func(*Buffer) error
-		src    []byte
-		off    int64
-		expN   int
-		expOff int
-		expLen int
-		expCap int
-		expBuf []byte
-	}{
-		{
-			testN:  "append",
-			init:   []byte{0, 1, 2},
-			opts:   nil,
-			src:    []byte{3, 4, 5},
-			off:    3,
-			expN:   3,
-			expOff: 0,
-			expLen: 6,
-			expCap: 6,
-			expBuf: []byte{0, 1, 2, 3, 4, 5},
-		},
-		{
-			testN:  "override and extend",
-			init:   []byte{0, 1, 2},
-			opts:   []func(*Buffer) error{Offset(2)},
-			src:    []byte{3, 4, 5},
-			off:    1,
-			expN:   3,
-			expOff: 2,
-			expLen: 4,
-			expCap: 4,
-			expBuf: []byte{0, 3, 4, 5},
-		},
-		{
-			testN:  "override tail",
-			init:   []byte{0, 1, 2},
-			opts:   []func(*Buffer) error{Offset(2)},
-			src:    []byte{3, 4},
-			off:    1,
-			expN:   2,
-			expOff: 2,
-			expLen: 3,
-			expCap: 3,
-			expBuf: []byte{0, 3, 4},
-		},
-		{
-			testN:  "override middle",
-			init:   []byte{0, 1, 2, 3},
-			opts:   []func(*Buffer) error{Offset(2)},
-			src:    []byte{4, 5},
-			off:    1,
-			expN:   2,
-			expOff: 2,
-			expLen: 4,
-			expCap: 4,
-			expBuf: []byte{0, 4, 5, 3},
-		},
-	}
-
-	for _, tc := range tt {
-		t.Run(tc.testN, func(t *testing.T) {
-			// --- Given ---
-			buf, err := With(tc.init, tc.opts...)
-			require.NoError(t, err)
-
-			// --- When ---
-			n, err := buf.WriteAt(tc.src, tc.off)
-
-			// --- Then ---
-			assert.NoError(t, err, "test %s", tc.testN)
-			assert.Exactly(t, tc.expN, n, "test %s", tc.testN)
-			assert.Exactly(t, tc.expOff, buf.Offset(), "test %s", tc.testN)
-			assert.Exactly(t, tc.expLen, buf.Len(), "test %s", tc.testN)
-			assert.Exactly(t, tc.expCap, buf.Cap(), "test %s", tc.testN)
-			assert.Exactly(t, tc.expBuf, buf.buf, "test %s", tc.testN)
-			assert.NoError(t, buf.Close(), "test %s", tc.testN)
-		})
-	}
 }
 
 func Test_Buffer_WriteTo(t *testing.T) {
@@ -1007,38 +1246,105 @@ func Test_Buffer_Seek_BeyondLen(t *testing.T) {
 	assert.Exactly(t, int64(5), n)
 }
 
-func Test_Buffer_Truncate_ToZero(t *testing.T) {
-	// --- Given ---
-	buf, err := With([]byte{0, 1, 2, 3})
-	require.NoError(t, err)
+func Test_Buffer_Truncate(t *testing.T) {
+	tt := []struct {
+		testN string
 
-	// --- When ---
-	err = buf.Truncate(0)
+		init   []byte
+		opts   []func(*Buffer) error
+		off    int64
+		expOff int
+		expLen int
+		expCap int
+		expBuf []byte
+	}{
+		{
+			testN:  "truncate to zero",
+			init:   []byte{0, 1, 2, 3},
+			opts:   nil,
+			off:    0,
+			expOff: 0,
+			expLen: 0,
+			expCap: 4,
+			expBuf: []byte{},
+		},
+		{
+			testN:  "truncate to one",
+			init:   []byte{0, 1, 2, 3},
+			opts:   nil,
+			off:    1,
+			expOff: 0,
+			expLen: 1,
+			expCap: 4,
+			expBuf: []byte{0},
+		},
+		{
+			testN:  "truncate beyond len, less then cap",
+			init:   make([]byte, 3, 5),
+			opts:   nil,
+			off:    4,
+			expOff: 0,
+			expLen: 4,
+			expCap: 5,
+			expBuf: []byte{0, 0, 0, 0},
+		},
+		{
+			testN:  "truncate beyond cap",
+			init:   make([]byte, 3, 5),
+			opts:   nil,
+			off:    6,
+			expOff: 0,
+			expLen: 6,
+			expCap: 13,
+			expBuf: []byte{0, 0, 0, 0, 0, 0},
+		},
+		{
+			testN:  "truncate at len",
+			init:   make([]byte, 3, 5),
+			opts:   nil,
+			off:    3,
+			expOff: 0,
+			expLen: 3,
+			expCap: 5,
+			expBuf: []byte{0, 0, 0},
+		},
+		{
+			testN:  "truncate at cap",
+			init:   make([]byte, 3, 5),
+			opts:   nil,
+			off:    5,
+			expOff: 0,
+			expLen: 5,
+			expCap: 5,
+			expBuf: []byte{0, 0, 0, 0, 0},
+		},
+	}
 
-	// --- Then ---
-	assert.NoError(t, err)
-	assert.Exactly(t, 0, buf.Offset())
-	assert.Exactly(t, 0, buf.Len())
-	assert.Exactly(t, 4, buf.Cap())
-	assert.Exactly(t, []byte{}, buf.buf)
-	assert.NoError(t, buf.Close())
-}
+	for _, tc := range tt {
+		t.Run(tc.testN, func(t *testing.T) {
+			// --- Given ---
+			var buf *Buffer
+			var err error
 
-func Test_Buffer_Truncate_ToOne(t *testing.T) {
-	// --- Given ---
-	buf, err := With([]byte{0, 1, 2, 3})
-	require.NoError(t, err)
+			if tc.init == nil {
+				buf = &Buffer{} // Test for zero value.
+			} else {
+				buf, err = With(tc.init, tc.opts...)
+				require.NoError(t, err)
+			}
 
-	// --- When ---
-	err = buf.Truncate(1)
+			// --- When ---
+			err = buf.Truncate(tc.off)
 
-	// --- Then ---
-	assert.NoError(t, err)
-	assert.Exactly(t, 0, buf.Offset())
-	assert.Exactly(t, 1, buf.Len())
-	assert.Exactly(t, 4, buf.Cap())
-	assert.Exactly(t, []byte{0}, buf.buf)
-	assert.NoError(t, buf.Close())
+			// --- Then ---
+			assert.NoError(t, err, "test %s", tc.testN)
+			assert.Exactly(t, tc.expOff, buf.Offset(), "test %s", tc.testN)
+			assert.Exactly(t, tc.expLen, buf.Len(), "test %s", tc.testN)
+			assert.Exactly(t, tc.expCap, buf.Cap(), "test %s", tc.testN)
+			assert.Exactly(t, tc.expBuf, buf.buf, "test %s", tc.testN)
+			assert.NoError(t, buf.Close(), "test %s", tc.testN)
+		})
+	}
 }
 
 func Test_Buffer_Truncate_ToZeroAndWrite(t *testing.T) {
@@ -1078,7 +1384,7 @@ func Test_Buffer_Truncate_BeyondLenAndWrite(t *testing.T) {
 	assert.Exactly(t, 2, n)
 	assert.Exactly(t, 10, buf.Offset())
 	assert.Exactly(t, 10, buf.Len())
-	assert.Exactly(t, 10, buf.Cap())
+	assert.Exactly(t, 12, buf.Cap())
 	assert.Exactly(t, []byte{0, 1, 2, 3, 0, 0, 0, 0, 4, 5}, buf.buf)
 	assert.NoError(t, buf.Close())
 }
@@ -1102,7 +1408,7 @@ func Test_Buffer_Truncate_BeyondCapAndWrite(t *testing.T) {
 	assert.Exactly(t, 2, n)
 	assert.Exactly(t, 12, buf.Offset())
 	assert.Exactly(t, 12, buf.Len())
-	assert.Exactly(t, 12, buf.Cap())
+	assert.Exactly(t, 22, buf.Cap())
 	want := []byte{0, 1, 2, 3, 0, 0, 0, 0, 0, 0, 4, 5}
 	assert.Exactly(t, want, buf.buf)
 	assert.NoError(t, buf.Close())
@@ -1123,7 +1429,7 @@ func Test_Buffer_Truncate_ExtendBeyondLenResetAndWrite(t *testing.T) {
 	assert.Exactly(t, 2, n)
 	assert.Exactly(t, 2, buf.Offset())
 	assert.Exactly(t, 2, buf.Len())
-	assert.Exactly(t, 8, buf.Cap())
+	assert.Exactly(t, 12, buf.Cap())
 	assert.Exactly(t, []byte{4, 5}, buf.buf)
 	assert.NoError(t, buf.Close())
 }
@@ -1142,7 +1448,7 @@ func Test_Buffer_Truncate_EdgeCaseWhenSizeEqualsLength(t *testing.T) {
 	assert.Exactly(t, 2, n)
 	assert.Exactly(t, 6, buf.Offset())
 	assert.Exactly(t, 6, buf.Len())
-	assert.Exactly(t, 6, buf.Cap())
+	assert.Exactly(t, 10, buf.Cap())
 	assert.Exactly(t, []byte{0, 1, 2, 3, 4, 5}, buf.buf)
 	assert.NoError(t, buf.Close())
 }
