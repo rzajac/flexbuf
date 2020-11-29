@@ -1246,6 +1246,19 @@ func Test_Buffer_Seek_BeyondLen(t *testing.T) {
 	assert.Exactly(t, int64(5), n)
 }
 
+func Test_Buffer_SeekStart(t *testing.T) {
+	// --- Given ---
+	buf, err := With([]byte{0, 1, 2}, Offset(2))
+	require.NoError(t, err)
+
+	// --- When ---
+	n := buf.SeekStart()
+
+	// --- Then ---
+	assert.Exactly(t, int64(2), n)
+	assert.Exactly(t, 0, buf.off)
+}
+
 func Test_Buffer_Truncate(t *testing.T) {
 	tt := []struct {
 		testN string

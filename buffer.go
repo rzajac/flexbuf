@@ -293,6 +293,14 @@ func (b *Buffer) Seek(offset int64, whence int) (int64, error) {
 	return int64(b.off), nil
 }
 
+// SeekStart is a convenience method setting the buffer's offset to zero
+// and returning the value it had before the seek.
+func (b *Buffer) SeekStart() int64 {
+	prev := b.off
+	b.off = 0
+	return int64(prev)
+}
+
 // Truncate changes the size of the buffer discarding bytes at offsets greater
 // then size. It does not change the offset. It returns error os.ErrInvalid
 // only when when size is negative.
