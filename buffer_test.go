@@ -230,6 +230,44 @@ func Test_Buffer_grow(t *testing.T) {
 	}
 }
 
+func Test_Buffer_Grow(t *testing.T) {
+	// --- Given ---
+	data := make([]byte, 10, 15)
+	buf, err := With(data, Offset(5))
+	require.NoError(t, err)
+
+	// --- When ---
+	buf.Grow(20)
+
+	// --- Then ---
+	assert.Exactly(t, 10, buf.Len())
+	assert.Exactly(t, 30, buf.Cap())
+	assert.Exactly(t, 5, buf.Offset())
+}
+
+func Test_Buffer_Grow_AlreadyEnoughSpace(t *testing.T) {
+	// --- Given ---
+	data := make([]byte, 10, 15)
+	buf, err := With(data, Offset(5))
+	require.NoError(t, err)
+
+	// --- When ---
+	buf.Grow(5)
+
+	// --- Then ---
+	assert.Exactly(t, 10, buf.Len())
+	assert.Exactly(t, 15, buf.Cap())
+	assert.Exactly(t, 5, buf.Offset())
+}
+
+func Test_Buffer_Grow_Panics(t *testing.T) {
+	// --- Given ---
+	buf := &Buffer{}
+
+	// --- Then ---
+	assert.Panics(t, func() { buf.Grow(-1) })
+}
+
 func Test_Buffer_Write(t *testing.T) {
 	tt := []struct {
 		testN string

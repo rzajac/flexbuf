@@ -345,20 +345,26 @@ func (b *Buffer) Truncate(size int64) error {
 	return nil
 }
 
-// tryGrowByReslice is a inlineable version of grow for the fast-case where the
-// internal buffer only needs to be resliced. It returns whether it succeeded.
-func (b *Buffer) tryGrowByReslice(n int) bool {
-	// No need to do anything if there is enough space
-	// between current offset and the length of the buffer.
-	if n <= len(b.buf)-b.off {
-		return true
+// Grow grows the buffer's capacity, if necessary, to guarantee space for
+// another n bytes. After Grow(n), at least n bytes can be written to the
+// buffer without another allocation.
+// If n is negative, Grow will panic.
+// If the buffer can't grow it will panic with ErrTooLarge.
+func (b *Buffer) Grow(n int) {
+	if n < 0 {
+		panic("flexbuf.Buffer.Grow: negative count")
+	}
+	l := len(b.buf)
+
+	if l+n <= cap(b.buf) {
+		return
 	}
 
-	if n <= cap(b.buf)-b.off {
-		b.buf = b.buf[:b.off+n]
-		return true
-	}
-	return false
+	// Allocate bigger buffer.
+	tmp := makeSlice(l + n)
+	copy(tmp, b.buf)
+	b.buf = tmp
+	b.buf = b.buf[:l]
 }
 
 // grow grows the buffer capacity to guarantee space for n more bytes. In
@@ -377,6 +383,22 @@ func (b *Buffer) grow(n int) {
 	b.buf = tmp
 }
 
+// tryGrowByReslice is a inlineable version of grow for the fast-case where the
+// internal buffer only needs to be resliced. It returns whether it succeeded.
+func (b *Buffer) tryGrowByReslice(n int) bool {
+	// No need to do anything if there is enough space
+	// between current offset and the length of the buffer.
+	if n <= len(b.buf)-b.off {
+		return true
+	}
+
+	if n <= cap(b.buf)-b.off {
+		b.buf = b.buf[:b.off+n]
+		return true
+	}
+	return false
+}
+
 // makeSlice allocates a slice of size n. If the allocation fails, it panics
 // with ErrTooLarge.
 func makeSlice(n int) []byte {
@@ -390,6 +412,7 @@ func makeSlice(n int) []byte {
 }
 
 // zeroOutSlice zeroes out the byte slice.
+// TODO: Test cases where this is used.
 func zeroOutSlice(b []byte) {
 	for i := range b {
 		b[i] = 0
@@ -416,7 +439,7 @@ func (b *Buffer) Cap() int {
 // nil error.
 func (b *Buffer) Close() error {
 	b.off = 0
-	zeroOutSlice(b.buf[0:cap(b.buf)])
+	zeroOutSlice(b.buf[0:len(b.buf)])
 	b.buf = b.buf[:0]
 	return nil
 }
