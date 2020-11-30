@@ -1524,6 +1524,14 @@ func Test_Buffer_Close_ZeroValue(t *testing.T) {
 	assert.NoError(t, buf.Close())
 }
 
+func Test_Buffer_Close_NilBuffer(t *testing.T) {
+	// --- When ---
+	var buf *Buffer
+
+	// --- Then ---
+	assert.NoError(t, buf.Close())
+}
+
 func Test_helpers_zeroOutSlice(t *testing.T) {
 	// --- Given ---
 	data := []byte{0, 1, 2, 3}

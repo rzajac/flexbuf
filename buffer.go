@@ -438,6 +438,9 @@ func (b *Buffer) Cap() int {
 // Close sets offset to zero and zero put the buffer. It always returns
 // nil error.
 func (b *Buffer) Close() error {
+	if b == nil {
+		return nil
+	}
 	b.off = 0
 	zeroOutSlice(b.buf[0:len(b.buf)])
 	b.buf = b.buf[:0]
