@@ -289,7 +289,7 @@ func Test_Buffer_Write(t *testing.T) {
 			expN:   3,
 			expOff: 3,
 			expLen: 3,
-			expCap: 3,
+			expCap: 64,
 			expBuf: []byte{0, 1, 2},
 		},
 		{
@@ -438,7 +438,7 @@ func Test_Buffer_WriteByte(t *testing.T) {
 			opts:   nil,
 			expOff: 1,
 			expLen: 1,
-			expCap: 1,
+			expCap: 64,
 			expBuf: []byte{0xFF},
 		},
 		{
@@ -538,7 +538,7 @@ func Test_Buffer_WriteAt(t *testing.T) {
 			expN:   3,
 			expOff: 0,
 			expLen: 3,
-			expCap: 3,
+			expCap: 64,
 			expBuf: []byte{0, 1, 2},
 		},
 		{
@@ -779,7 +779,7 @@ func Test_Buffer_WriteAt_ZeroValue(t *testing.T) {
 	assert.Exactly(t, 3, n)
 	assert.Exactly(t, 0, buf.Offset())
 	assert.Exactly(t, 3, buf.Len())
-	assert.Exactly(t, 3, buf.Cap())
+	assert.Exactly(t, 64, buf.Cap())
 	want := []byte{0, 1, 2}
 	assert.Exactly(t, want, buf.buf)
 	assert.NoError(t, buf.Close())

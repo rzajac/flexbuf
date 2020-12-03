@@ -27,6 +27,9 @@ import (
 	"os"
 )
 
+// smallBufferSize is an initial allocation minimal capacity.
+const smallBufferSize = 64
+
 // ErrOutOfBounds is returned for invalid offsets.
 var ErrOutOfBounds = errors.New("offset out of bounds")
 
@@ -354,8 +357,8 @@ func (b *Buffer) Grow(n int) {
 	if n < 0 {
 		panic("flexbuf.Buffer.Grow: negative count")
 	}
-	l := len(b.buf)
 
+	l := len(b.buf)
 	if l+n <= cap(b.buf) {
 		return
 	}
@@ -376,7 +379,10 @@ func (b *Buffer) grow(n int) {
 	if ok := b.tryGrowByReslice(n); ok {
 		return
 	}
-
+	if b.buf == nil && n <= smallBufferSize {
+		b.buf = make([]byte, n, smallBufferSize)
+		return
+	}
 	// Allocate bigger buffer.
 	tmp := makeSlice(cap(b.buf)*2 + n) // cap(b.buf) may be zero.
 	copy(tmp, b.buf)
