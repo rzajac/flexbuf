@@ -273,7 +273,7 @@ func Test_Buffer_Write(t *testing.T) {
 		testN string
 
 		init   []byte
-		opts   []func(*Buffer) error
+		opts   []func(*Buffer)
 		src    []byte
 		expN   int
 		expOff int
@@ -317,7 +317,7 @@ func Test_Buffer_Write(t *testing.T) {
 		{
 			testN:  "offset at len",
 			init:   []byte{0, 1, 2},
-			opts:   []func(*Buffer) error{Offset(3)},
+			opts:   []func(*Buffer){Offset(3)},
 			src:    []byte{3, 4, 5},
 			expN:   3,
 			expOff: 6,
@@ -328,7 +328,7 @@ func Test_Buffer_Write(t *testing.T) {
 		{
 			testN:  "append",
 			init:   []byte{0, 1, 2},
-			opts:   []func(*Buffer) error{Append},
+			opts:   []func(*Buffer){Append},
 			src:    []byte{3, 4, 5},
 			expN:   3,
 			expOff: 6,
@@ -339,7 +339,7 @@ func Test_Buffer_Write(t *testing.T) {
 		{
 			testN:  "override and extend",
 			init:   []byte{0, 1, 2},
-			opts:   []func(*Buffer) error{Offset(1)},
+			opts:   []func(*Buffer){Offset(1)},
 			src:    []byte{3, 4, 5},
 			expN:   3,
 			expOff: 4,
@@ -350,7 +350,7 @@ func Test_Buffer_Write(t *testing.T) {
 		{
 			testN:  "override and extend big",
 			init:   []byte{0, 1, 2},
-			opts:   []func(*Buffer) error{Offset(1)},
+			opts:   []func(*Buffer){Offset(1)},
 			src:    bytes.Repeat([]byte{0, 1}, 1<<20),
 			expN:   2 * 1 << 20,
 			expOff: 2*1<<20 + 1,
@@ -361,7 +361,7 @@ func Test_Buffer_Write(t *testing.T) {
 		{
 			testN:  "override tail",
 			init:   []byte{0, 1, 2},
-			opts:   []func(*Buffer) error{Offset(1)},
+			opts:   []func(*Buffer){Offset(1)},
 			src:    []byte{3, 4},
 			expN:   2,
 			expOff: 3,
@@ -372,7 +372,7 @@ func Test_Buffer_Write(t *testing.T) {
 		{
 			testN:  "override middle",
 			init:   []byte{0, 1, 2, 3},
-			opts:   []func(*Buffer) error{Offset(1)},
+			opts:   []func(*Buffer){Offset(1)},
 			src:    []byte{4, 5},
 			expN:   2,
 			expOff: 3,
@@ -426,7 +426,7 @@ func Test_Buffer_WriteByte(t *testing.T) {
 		testN string
 
 		init   []byte
-		opts   []func(*Buffer) error
+		opts   []func(*Buffer)
 		expOff int
 		expLen int
 		expCap int
@@ -453,7 +453,7 @@ func Test_Buffer_WriteByte(t *testing.T) {
 		{
 			testN:  "offset at len",
 			init:   []byte{0, 1, 2},
-			opts:   []func(*Buffer) error{Offset(3)},
+			opts:   []func(*Buffer){Offset(3)},
 			expOff: 4,
 			expLen: 4,
 			expCap: 7,
@@ -462,7 +462,7 @@ func Test_Buffer_WriteByte(t *testing.T) {
 		{
 			testN:  "append",
 			init:   []byte{0, 1, 2},
-			opts:   []func(*Buffer) error{Append},
+			opts:   []func(*Buffer){Append},
 			expOff: 4,
 			expLen: 4,
 			expCap: 7,
@@ -471,7 +471,7 @@ func Test_Buffer_WriteByte(t *testing.T) {
 		{
 			testN:  "override tail",
 			init:   []byte{0, 1, 2},
-			opts:   []func(*Buffer) error{Offset(2)},
+			opts:   []func(*Buffer){Offset(2)},
 			expOff: 3,
 			expLen: 3,
 			expCap: 3,
@@ -480,7 +480,7 @@ func Test_Buffer_WriteByte(t *testing.T) {
 		{
 			testN:  "override middle",
 			init:   []byte{0, 1, 2, 3},
-			opts:   []func(*Buffer) error{Offset(1)},
+			opts:   []func(*Buffer){Offset(1)},
 			expOff: 2,
 			expLen: 4,
 			expCap: 4,
@@ -520,7 +520,7 @@ func Test_Buffer_WriteAt(t *testing.T) {
 		testN string
 
 		init   []byte
-		opts   []func(*Buffer) error
+		opts   []func(*Buffer)
 		src    []byte
 		off    int64
 		expN   int
@@ -628,7 +628,7 @@ func Test_Buffer_WriteAt(t *testing.T) {
 		{
 			testN:  "write at offset beyond cap - offset close to len",
 			init:   make([]byte, 5, 7),
-			opts:   []func(*Buffer) error{Offset(4)},
+			opts:   []func(*Buffer){Offset(4)},
 			src:    []byte{1, 2},
 			off:    8,
 			expN:   2,
@@ -672,7 +672,7 @@ func Test_Buffer_ReadFrom(t *testing.T) {
 		testN string
 
 		init   []byte
-		opts   []func(*Buffer) error
+		opts   []func(*Buffer)
 		src    []byte
 		expN   int64
 		expOff int
@@ -694,7 +694,7 @@ func Test_Buffer_ReadFrom(t *testing.T) {
 		{
 			testN:  "append",
 			init:   []byte{0, 1, 2},
-			opts:   []func(*Buffer) error{Append},
+			opts:   []func(*Buffer){Append},
 			src:    []byte{3, 4, 5},
 			expN:   3,
 			expOff: 6,
@@ -716,7 +716,7 @@ func Test_Buffer_ReadFrom(t *testing.T) {
 		{
 			testN:  "read up to cap",
 			init:   make([]byte, 3, 6),
-			opts:   []func(*Buffer) error{Append},
+			opts:   []func(*Buffer){Append},
 			src:    []byte{3, 4, 5},
 			expN:   3,
 			expOff: 6,
@@ -727,7 +727,7 @@ func Test_Buffer_ReadFrom(t *testing.T) {
 		{
 			testN:  "use of tmp space",
 			init:   bytes.Repeat([]byte{0}, 50),
-			opts:   []func(*Buffer) error{Offset(25)},
+			opts:   []func(*Buffer){Offset(25)},
 			src:    bytes.Repeat([]byte{1, 2, 3}, 1<<9),
 			expN:   3 * 1 << 9,
 			expOff: 3*1<<9 + 25,
@@ -982,7 +982,7 @@ func Test_Buffer_Read(t *testing.T) {
 		testN string
 
 		init   []byte
-		opts   []func(*Buffer) error
+		opts   []func(*Buffer)
 		dst    []byte
 		expN   int
 		expOff int
@@ -1015,7 +1015,7 @@ func Test_Buffer_Read(t *testing.T) {
 		{
 			testN:  "read tail",
 			init:   []byte{0, 1, 2},
-			opts:   []func(*Buffer) error{Offset(1)},
+			opts:   []func(*Buffer){Offset(1)},
 			dst:    make([]byte, 2, 3),
 			expN:   2,
 			expOff: 3,
@@ -1125,7 +1125,7 @@ func Test_Buffer_ReadAt(t *testing.T) {
 		testN string
 
 		init   []byte
-		opts   []func(*Buffer) error
+		opts   []func(*Buffer)
 		dst    []byte
 		off    int64
 		expN   int
@@ -1137,7 +1137,7 @@ func Test_Buffer_ReadAt(t *testing.T) {
 		{
 			testN:  "read all",
 			init:   []byte{0, 1, 2},
-			opts:   []func(*Buffer) error{Offset(1)},
+			opts:   []func(*Buffer){Offset(1)},
 			dst:    make([]byte, 3),
 			off:    0,
 			expN:   3,
@@ -1149,7 +1149,7 @@ func Test_Buffer_ReadAt(t *testing.T) {
 		{
 			testN:  "read head",
 			init:   []byte{0, 1, 2},
-			opts:   []func(*Buffer) error{Offset(1)},
+			opts:   []func(*Buffer){Offset(1)},
 			dst:    make([]byte, 2, 3),
 			off:    0,
 			expN:   2,
@@ -1161,7 +1161,7 @@ func Test_Buffer_ReadAt(t *testing.T) {
 		{
 			testN:  "read tail",
 			init:   []byte{0, 1, 2},
-			opts:   []func(*Buffer) error{Offset(2)},
+			opts:   []func(*Buffer){Offset(2)},
 			dst:    make([]byte, 2, 3),
 			off:    1,
 			expN:   2,
@@ -1302,7 +1302,7 @@ func Test_Buffer_Truncate(t *testing.T) {
 		testN string
 
 		init   []byte
-		opts   []func(*Buffer) error
+		opts   []func(*Buffer)
 		off    int64
 		expOff int
 		expLen int

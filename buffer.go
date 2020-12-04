@@ -34,23 +34,18 @@ const smallBufferSize = 64
 var ErrOutOfBounds = errors.New("offset out of bounds")
 
 // Offset is the constructor option setting the initial buffer offset to off.
-func Offset(off int) func(*Buffer) error {
-	return func(b *Buffer) error {
-		if off < 0 || off > len(b.buf) {
-			return ErrOutOfBounds
-		}
+func Offset(off int) func(*Buffer) {
+	return func(b *Buffer) {
 		b.off = off
-		return nil
 	}
 }
 
 // Append is the constructor option setting the initial offset
 // to the end of the buffer. Append should be the last option on the
 // option list.
-func Append(buf *Buffer) error {
+func Append(buf *Buffer) {
 	buf.flag |= os.O_APPEND
 	buf.off = len(buf.buf)
-	return nil
 }
 
 // A Buffer is a variable-sized buffer of bytes.
@@ -68,12 +63,12 @@ type Buffer struct {
 // New returns new instance of the Buffer. The difference between New and
 // using zero value buffer is that New will initialize buffer with capacity
 // of bytes.MinRead.
-func New(opts ...func(buffer *Buffer) error) (*Buffer, error) {
+func New(opts ...func(buffer *Buffer)) (*Buffer, error) {
 	b, err := With(make([]byte, 0, bytes.MinRead), opts...)
 	if err != nil {
 		return nil, err
 	}
-	return b, err
+	return b, nil
 }
 
 // With creates new instance of Buffer initialized with data. The new Buffer
@@ -81,15 +76,17 @@ func New(opts ...func(buffer *Buffer) error) (*Buffer, error) {
 // NewBuffer is intended to prepare a Buffer to read existing data. It can
 // also be used to set the initial size of the internal buffer for writing.
 // To do that, buf should have the desired capacity but a length of zero.
-func With(data []byte, opts ...func(*Buffer) error) (*Buffer, error) {
+func With(data []byte, opts ...func(*Buffer)) (*Buffer, error) {
 	b := &Buffer{
 		buf: data,
 	}
 
 	for _, opt := range opts {
-		if err := opt(b); err != nil {
-			return nil, err
-		}
+		opt(b)
+	}
+
+	if b.off < 0 || b.off > len(b.buf) {
+		return nil, ErrOutOfBounds
 	}
 
 	return b, nil
