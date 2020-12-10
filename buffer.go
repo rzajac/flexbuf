@@ -62,13 +62,10 @@ type Buffer struct {
 
 // New returns new instance of the Buffer. The difference between New and
 // using zero value buffer is that New will initialize buffer with capacity
-// of bytes.MinRead.
-func New(opts ...func(buffer *Buffer)) (*Buffer, error) {
-	b, err := With(make([]byte, 0, bytes.MinRead), opts...)
-	if err != nil {
-		return nil, err
-	}
-	return b, nil
+// of bytes.MinRead. It will panic with ErrOutOfBounds if option sets offset
+// as negative number or greater then bytes.MinRead.
+func New(opts ...func(buffer *Buffer)) *Buffer {
+	return With(make([]byte, 0, bytes.MinRead), opts...)
 }
 
 // With creates new instance of Buffer initialized with data. The new Buffer
@@ -76,7 +73,9 @@ func New(opts ...func(buffer *Buffer)) (*Buffer, error) {
 // NewBuffer is intended to prepare a Buffer to read existing data. It can
 // also be used to set the initial size of the internal buffer for writing.
 // To do that, buf should have the desired capacity but a length of zero.
-func With(data []byte, opts ...func(*Buffer)) (*Buffer, error) {
+// It will panic with ErrOutOfBounds if option sets offset as negative number
+// or beyond buffer length.
+func With(data []byte, opts ...func(*Buffer)) *Buffer {
 	b := &Buffer{
 		buf: data,
 	}
@@ -86,10 +85,10 @@ func With(data []byte, opts ...func(*Buffer)) (*Buffer, error) {
 	}
 
 	if b.off < 0 || b.off > len(b.buf) {
-		return nil, ErrOutOfBounds
+		panic(ErrOutOfBounds)
 	}
 
-	return b, nil
+	return b
 }
 
 // Release releases ownership of the underlying buffer, the caller should not

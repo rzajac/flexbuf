@@ -12,20 +12,16 @@ import (
 )
 
 func Test_New_Offset_Negative(t *testing.T) {
-	// --- When ---
-	buf, err := New(Offset(-1))
-
-	// --- Then ---
-	assert.ErrorIs(t, err, ErrOutOfBounds)
-	assert.Nil(t, buf)
+	assert.Panics(t, func() {
+		New(Offset(-1))
+	})
 }
 
 func Test_With(t *testing.T) {
 	// --- When ---
-	buf, err := With([]byte{0, 1, 2})
+	buf := With([]byte{0, 1, 2})
 
 	// --- Then ---
-	assert.NoError(t, err)
 	assert.Exactly(t, 0, buf.flag)
 	assert.Exactly(t, 0, buf.off)
 	assert.Exactly(t, []byte{0, 1, 2}, buf.buf)
@@ -33,39 +29,31 @@ func Test_With(t *testing.T) {
 
 func Test_With_Offset(t *testing.T) {
 	// --- When ---
-	buf, err := With([]byte{0, 1, 2}, Offset(1))
+	buf := With([]byte{0, 1, 2}, Offset(1))
 
 	// --- Then ---
-	assert.NoError(t, err)
 	assert.Exactly(t, 0, buf.flag)
 	assert.Exactly(t, 1, buf.off)
 	assert.Exactly(t, []byte{0, 1, 2}, buf.buf)
 }
 
 func Test_With_Offset_Negative(t *testing.T) {
-	// --- When ---
-	buf, err := With([]byte{0, 1, 2}, Offset(-1))
-
-	// --- Then ---
-	assert.ErrorIs(t, err, ErrOutOfBounds)
-	assert.Nil(t, buf)
+	assert.Panics(t, func() {
+		With([]byte{0, 1, 2}, Offset(-1))
+	})
 }
 
 func Test_With_Offset_BeyondLen(t *testing.T) {
-	// --- When ---
-	buf, err := With([]byte{0, 1, 2}, Offset(5))
-
-	// --- Then ---
-	assert.ErrorIs(t, err, ErrOutOfBounds)
-	assert.Nil(t, buf)
+	assert.Panics(t, func() {
+		With([]byte{0, 1, 2}, Offset(5))
+	})
 }
 
 func Test_With_Append(t *testing.T) {
 	// --- When ---
-	buf, err := With([]byte{0, 1, 2}, Append)
+	buf := With([]byte{0, 1, 2}, Append)
 
 	// --- Then ---
-	assert.NoError(t, err)
 	assert.Exactly(t, os.O_APPEND, buf.flag)
 	assert.Exactly(t, 3, buf.off)
 	assert.Exactly(t, []byte{0, 1, 2}, buf.buf)
@@ -139,8 +127,7 @@ func Test_Buffer_tryGrowByReslice(t *testing.T) {
 		t.Run(tc.testN, func(t *testing.T) {
 			// --- Given ---
 			data := make([]byte, tc.len, tc.cap)
-			buf, err := With(data, Offset(tc.off))
-			require.NoError(t, err, "test %s", tc.testN)
+			buf := With(data, Offset(tc.off))
 
 			// --- When ---
 			ok := buf.tryGrowByReslice(tc.grow)
@@ -216,8 +203,7 @@ func Test_Buffer_grow(t *testing.T) {
 		t.Run(tc.testN, func(t *testing.T) {
 			// --- Given ---
 			data := make([]byte, tc.len, tc.cap)
-			buf, err := With(data, Offset(tc.off))
-			require.NoError(t, err, "test %s", tc.testN)
+			buf := With(data, Offset(tc.off))
 
 			// --- When ---
 			buf.grow(tc.grow)
@@ -233,8 +219,7 @@ func Test_Buffer_grow(t *testing.T) {
 func Test_Buffer_Grow(t *testing.T) {
 	// --- Given ---
 	data := make([]byte, 10, 15)
-	buf, err := With(data, Offset(5))
-	require.NoError(t, err)
+	buf := With(data, Offset(5))
 
 	// --- When ---
 	buf.Grow(20)
@@ -248,8 +233,7 @@ func Test_Buffer_Grow(t *testing.T) {
 func Test_Buffer_Grow_AlreadyEnoughSpace(t *testing.T) {
 	// --- Given ---
 	data := make([]byte, 10, 15)
-	buf, err := With(data, Offset(5))
-	require.NoError(t, err)
+	buf := With(data, Offset(5))
 
 	// --- When ---
 	buf.Grow(5)
@@ -402,8 +386,7 @@ func Test_Buffer_Write(t *testing.T) {
 			if tc.init == nil {
 				buf = &Buffer{} // Test for zero value.
 			} else {
-				buf, err = With(tc.init, tc.opts...)
-				require.NoError(t, err)
+				buf = With(tc.init, tc.opts...)
 			}
 
 			// --- When ---
@@ -497,8 +480,7 @@ func Test_Buffer_WriteByte(t *testing.T) {
 			if tc.init == nil {
 				buf = &Buffer{} // Test for zero value.
 			} else {
-				buf, err = With(tc.init, tc.opts...)
-				require.NoError(t, err)
+				buf = With(tc.init, tc.opts...)
 			}
 
 			// --- When ---
@@ -648,8 +630,7 @@ func Test_Buffer_WriteAt(t *testing.T) {
 			if tc.init == nil {
 				buf = &Buffer{} // Test for zero value.
 			} else {
-				buf, err = With(tc.init, tc.opts...)
-				require.NoError(t, err)
+				buf = With(tc.init, tc.opts...)
 			}
 
 			// --- When ---
@@ -746,8 +727,7 @@ func Test_Buffer_ReadFrom(t *testing.T) {
 			if tc.init == nil {
 				buf = &Buffer{} // Test for zero value.
 			} else {
-				buf, err = With(tc.init, tc.opts...)
-				require.NoError(t, err)
+				buf = With(tc.init, tc.opts...)
 			}
 
 			// --- When ---
@@ -787,8 +767,7 @@ func Test_Buffer_WriteAt_ZeroValue(t *testing.T) {
 
 func Test_Buffer_WriteAt_OverrideAndExtend(t *testing.T) {
 	// --- Given ---
-	buf, err := With([]byte{0, 1, 2})
-	require.NoError(t, err)
+	buf := With([]byte{0, 1, 2})
 
 	// --- When ---
 	data := bytes.Repeat([]byte{0, 1}, 500)
@@ -807,8 +786,7 @@ func Test_Buffer_WriteAt_OverrideAndExtend(t *testing.T) {
 
 func Test_Buffer_WriteAt_BeyondCap(t *testing.T) {
 	// --- Given ---
-	buf, err := With([]byte{0, 1, 2})
-	require.NoError(t, err)
+	buf := With([]byte{0, 1, 2})
 
 	// --- When ---
 	n, err := buf.WriteAt([]byte{3, 4, 5}, 1000)
@@ -827,8 +805,7 @@ func Test_Buffer_WriteAt_BeyondCap(t *testing.T) {
 
 func Test_Buffer_WriteTo(t *testing.T) {
 	// --- Given ---
-	buf, err := With([]byte{0, 1, 2, 3}, Offset(1))
-	require.NoError(t, err)
+	buf := With([]byte{0, 1, 2, 3}, Offset(1))
 
 	// --- When ---
 	dst := &bytes.Buffer{}
@@ -843,8 +820,7 @@ func Test_Buffer_WriteTo(t *testing.T) {
 
 func Test_Buffer_WriteTo_OffsetAtTheEnd(t *testing.T) {
 	// --- Given ---
-	buf, err := With([]byte{0, 1, 2, 3}, Offset(4))
-	require.NoError(t, err)
+	buf := With([]byte{0, 1, 2, 3}, Offset(4))
 
 	// --- When ---
 	dst := &bytes.Buffer{}
@@ -859,8 +835,7 @@ func Test_Buffer_WriteTo_OffsetAtTheEnd(t *testing.T) {
 
 func Test_Buffer_WriteString(t *testing.T) {
 	// --- Given ---
-	buf, err := With([]byte{0, 1, 2}, Offset(1))
-	require.NoError(t, err)
+	buf := With([]byte{0, 1, 2}, Offset(1))
 
 	// --- When ---
 	n, err := buf.WriteString("abc")
@@ -893,8 +868,7 @@ func Test_Buffer_Read_ZeroValue(t *testing.T) {
 
 func Test_Buffer_Read_WithSmallBuffer(t *testing.T) {
 	// --- Given ---
-	buf, err := With([]byte{0, 1, 2, 3, 4})
-	require.NoError(t, err)
+	buf := With([]byte{0, 1, 2, 3, 4})
 	dst := make([]byte, 3)
 
 	// --- Then ---
@@ -937,9 +911,8 @@ func Test_Buffer_Read_WithSmallBuffer(t *testing.T) {
 
 func Test_Buffer_Read_BeyondLen(t *testing.T) {
 	// --- Given ---
-	buf, err := With([]byte{0, 1, 2})
-	require.NoError(t, err)
-	_, err = buf.Seek(5, io.SeekStart)
+	buf := With([]byte{0, 1, 2})
+	_, err := buf.Seek(5, io.SeekStart)
 	require.NoError(t, err)
 
 	// --- When ---
@@ -959,8 +932,7 @@ func Test_Buffer_Read_BeyondLen(t *testing.T) {
 
 func Test_Buffer_Read_BigBuffer(t *testing.T) {
 	// --- Given ---
-	buf, err := With([]byte{0, 1, 2})
-	require.NoError(t, err)
+	buf := With([]byte{0, 1, 2})
 
 	// --- When ---
 	dst := make([]byte, 6)
@@ -1028,8 +1000,7 @@ func Test_Buffer_Read(t *testing.T) {
 	for _, tc := range tt {
 		t.Run(tc.testN, func(t *testing.T) {
 			// --- Given ---
-			buf, err := With(tc.init, tc.opts...)
-			require.NoError(t, err)
+			buf := With(tc.init, tc.opts...)
 
 			// --- When ---
 			n, err := buf.Read(tc.dst)
@@ -1048,8 +1019,7 @@ func Test_Buffer_Read(t *testing.T) {
 
 func Test_Buffer_ReadByte(t *testing.T) {
 	// --- Given ---
-	buf, err := With([]byte{0, 1, 2}, Offset(2))
-	require.NoError(t, err)
+	buf := With([]byte{0, 1, 2}, Offset(2))
 
 	// --- When ---
 	got, err := buf.ReadByte()
@@ -1065,8 +1035,7 @@ func Test_Buffer_ReadByte(t *testing.T) {
 
 func Test_Buffer_ReadByte_EOF(t *testing.T) {
 	// --- Given ---
-	buf, err := With([]byte{0, 1, 2}, Offset(3))
-	require.NoError(t, err)
+	buf := With([]byte{0, 1, 2}, Offset(3))
 
 	// --- When ---
 	got, err := buf.ReadByte()
@@ -1082,8 +1051,7 @@ func Test_Buffer_ReadByte_EOF(t *testing.T) {
 
 func Test_Buffer_ReadAt_BeyondLen(t *testing.T) {
 	// --- Given ---
-	buf, err := With([]byte{0, 1, 2})
-	require.NoError(t, err)
+	buf := With([]byte{0, 1, 2})
 
 	// --- When ---
 	dst := make([]byte, 4)
@@ -1102,8 +1070,7 @@ func Test_Buffer_ReadAt_BeyondLen(t *testing.T) {
 
 func Test_Buffer_ReadAt_BigBuffer(t *testing.T) {
 	// --- Given ---
-	buf, err := With([]byte{0, 1, 2}, Offset(1))
-	require.NoError(t, err)
+	buf := With([]byte{0, 1, 2}, Offset(1))
 	dst := make([]byte, 4)
 
 	// --- When ---
@@ -1175,8 +1142,7 @@ func Test_Buffer_ReadAt(t *testing.T) {
 	for _, tc := range tt {
 		t.Run(tc.testN, func(t *testing.T) {
 			// --- Given ---
-			buf, err := With(tc.init, tc.opts...)
-			require.NoError(t, err)
+			buf := With(tc.init, tc.opts...)
 
 			// --- When ---
 			n, err := buf.ReadAt(tc.dst, tc.off)
@@ -1195,8 +1161,7 @@ func Test_Buffer_ReadAt(t *testing.T) {
 
 func Test_Buffer_String(t *testing.T) {
 	// --- Given ---
-	buf, err := With([]byte{'A', 'B', 'C', 'D'}, Offset(1))
-	require.NoError(t, err)
+	buf := With([]byte{'A', 'B', 'C', 'D'}, Offset(1))
 
 	// --- When ---
 	s := buf.String()
@@ -1239,8 +1204,7 @@ func Test_Buffer_Seek(t *testing.T) {
 	for _, tc := range tt {
 		t.Run(tc.testN, func(t *testing.T) {
 			// --- Given ---
-			buf, err := With([]byte{0, 1, 2, 3}, Offset(1))
-			require.NoError(t, err, "test %s", tc.testN)
+			buf := With([]byte{0, 1, 2, 3}, Offset(1))
 
 			// --- When ---
 			n, err := buf.Seek(tc.seek, tc.whence)
@@ -1260,8 +1224,7 @@ func Test_Buffer_Seek(t *testing.T) {
 
 func Test_Buffer_Seek_NegativeFinalOffset(t *testing.T) {
 	// --- Given ---
-	buf, err := With([]byte{0, 1, 2})
-	require.NoError(t, err)
+	buf := With([]byte{0, 1, 2})
 
 	// --- When ---
 	n, err := buf.Seek(-4, io.SeekEnd)
@@ -1273,8 +1236,7 @@ func Test_Buffer_Seek_NegativeFinalOffset(t *testing.T) {
 
 func Test_Buffer_Seek_BeyondLen(t *testing.T) {
 	// --- Given ---
-	buf, err := With([]byte{0, 1, 2})
-	require.NoError(t, err)
+	buf := With([]byte{0, 1, 2})
 
 	// --- When ---
 	n, err := buf.Seek(5, io.SeekStart)
@@ -1286,8 +1248,7 @@ func Test_Buffer_Seek_BeyondLen(t *testing.T) {
 
 func Test_Buffer_SeekStart(t *testing.T) {
 	// --- Given ---
-	buf, err := With([]byte{0, 1, 2}, Offset(2))
-	require.NoError(t, err)
+	buf := With([]byte{0, 1, 2}, Offset(2))
 
 	// --- When ---
 	n := buf.SeekStart()
@@ -1380,8 +1341,7 @@ func Test_Buffer_Truncate(t *testing.T) {
 			if tc.init == nil {
 				buf = &Buffer{} // Test for zero value.
 			} else {
-				buf, err = With(tc.init, tc.opts...)
-				require.NoError(t, err)
+				buf = With(tc.init, tc.opts...)
 			}
 
 			// --- When ---
@@ -1400,11 +1360,10 @@ func Test_Buffer_Truncate(t *testing.T) {
 
 func Test_Buffer_Truncate_ToZeroAndWrite(t *testing.T) {
 	// --- Given ---
-	buf, err := With([]byte{0, 1, 2, 3})
-	require.NoError(t, err)
+	buf := With([]byte{0, 1, 2, 3})
 
 	// --- When ---
-	err = buf.Truncate(0)
+	err := buf.Truncate(0)
 	assert.NoError(t, err)
 
 	n, err := buf.Write([]byte{4, 5})
@@ -1421,9 +1380,8 @@ func Test_Buffer_Truncate_ToZeroAndWrite(t *testing.T) {
 
 func Test_Buffer_Truncate_BeyondLenAndWrite(t *testing.T) {
 	// --- Given ---
-	buf, err := With([]byte{0, 1, 2, 3}, Append)
-	require.NoError(t, err)
-	_, err = buf.Seek(1, io.SeekStart)
+	buf := With([]byte{0, 1, 2, 3}, Append)
+	_, err := buf.Seek(1, io.SeekStart)
 	require.NoError(t, err)
 
 	// --- When ---
@@ -1447,8 +1405,7 @@ func Test_Buffer_Truncate_BeyondCapAndWrite(t *testing.T) {
 	data[1] = 1
 	data[2] = 2
 	data[3] = 3
-	buf, err := With(data, Append)
-	require.NoError(t, err)
+	buf := With(data, Append)
 
 	// --- When ---
 	assert.NoError(t, buf.Truncate(10))
@@ -1467,8 +1424,7 @@ func Test_Buffer_Truncate_BeyondCapAndWrite(t *testing.T) {
 
 func Test_Buffer_Truncate_ExtendBeyondLenResetAndWrite(t *testing.T) {
 	// --- Given ---
-	buf, err := With([]byte{0, 1, 2, 3}, Append)
-	require.NoError(t, err)
+	buf := With([]byte{0, 1, 2, 3}, Append)
 
 	// --- When ---
 	assert.NoError(t, buf.Truncate(8))
@@ -1487,8 +1443,7 @@ func Test_Buffer_Truncate_ExtendBeyondLenResetAndWrite(t *testing.T) {
 
 func Test_Buffer_Truncate_EdgeCaseWhenSizeEqualsLength(t *testing.T) {
 	// --- Given ---
-	buf, err := With([]byte{0, 1, 2, 3}, Append)
-	require.NoError(t, err)
+	buf := With([]byte{0, 1, 2, 3}, Append)
 
 	// --- When ---
 	assert.NoError(t, buf.Truncate(4))
@@ -1506,11 +1461,10 @@ func Test_Buffer_Truncate_EdgeCaseWhenSizeEqualsLength(t *testing.T) {
 
 func Test_Buffer_Truncate_Error(t *testing.T) {
 	// --- Given ---
-	buf, err := With([]byte{0, 1, 2}, Append)
-	require.NoError(t, err)
+	buf := With([]byte{0, 1, 2}, Append)
 
 	// --- When ---
-	err = buf.Truncate(-1)
+	err := buf.Truncate(-1)
 
 	// --- Then ---
 	assert.ErrorIs(t, err, os.ErrInvalid)
@@ -1529,12 +1483,13 @@ func Test_Buffer_Close_NilBuffer(t *testing.T) {
 	var buf *Buffer
 
 	// --- Then ---
+	//goland:noinspection GoNilness
 	assert.NoError(t, buf.Close())
 }
 
 func Test_Buffer_Release(t *testing.T) {
 	// --- Given ---
-	buf, _ := With([]byte{0, 1, 2, 3}, Offset(1))
+	buf := With([]byte{0, 1, 2, 3}, Offset(1))
 
 	// --- When ---
 	got := buf.Release()
