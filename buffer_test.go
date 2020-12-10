@@ -1532,6 +1532,19 @@ func Test_Buffer_Close_NilBuffer(t *testing.T) {
 	assert.NoError(t, buf.Close())
 }
 
+func Test_Buffer_Release(t *testing.T) {
+	// --- Given ---
+	buf, _ := With([]byte{0, 1, 2, 3}, Offset(1))
+
+	// --- When ---
+	got := buf.Release()
+
+	// --- Then ---
+	assert.Exactly(t, []byte{0, 1, 2, 3}, got)
+	assert.Exactly(t, 0, buf.off)
+	assert.Nil(t, buf.buf)
+}
+
 func Test_helpers_zeroOutSlice(t *testing.T) {
 	// --- Given ---
 	data := []byte{0, 1, 2, 3}

@@ -92,6 +92,15 @@ func With(data []byte, opts ...func(*Buffer)) (*Buffer, error) {
 	return b, nil
 }
 
+// Release releases ownership of the underlying buffer, the caller should not
+// use Instance of Buffer after this call.
+func (b *Buffer) Release() []byte {
+	buf := b.buf
+	b.off = 0
+	b.buf = nil
+	return buf
+}
+
 // Write writes the contents of p to the buffer at current offset, growing
 // the buffer as needed. The return value n is the length of p; err is
 // always nil.
