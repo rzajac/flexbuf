@@ -92,7 +92,7 @@ func With(data []byte, opts ...func(*Buffer)) *Buffer {
 }
 
 // Release releases ownership of the underlying buffer, the caller should not
-// use Instance of Buffer after this call.
+// use the instance of Buffer after this call.
 func (b *Buffer) Release() []byte {
 	buf := b.buf
 	b.off = 0
