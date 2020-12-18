@@ -25,7 +25,7 @@ it almost a drop in replacement for `os.File`.
 ## Installation
 
 ```
-go get github.com/rzajac/zrr
+go get github.com/rzajac/flexbuf
 ```
 
 ## Examples
