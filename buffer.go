@@ -41,8 +41,9 @@ func Offset(off int) func(*Buffer) {
 }
 
 // Append is the constructor option setting the initial offset
-// to the end of the buffer. Append should be the last option on the
-// option list.
+// to the end of the buffer. Also when Truncate is used the offset will
+// be set to the end of the buffer.
+// Append should be the last option on the option list.
 func Append(buf *Buffer) {
 	buf.flag |= os.O_APPEND
 	buf.off = len(buf.buf)
@@ -302,15 +303,24 @@ func (b *Buffer) Seek(offset int64, whence int) (int64, error) {
 }
 
 // SeekStart is a convenience method setting the buffer's offset to zero
-// and returning the value it had before the seek.
+// and returning the value it had before the method was called.
 func (b *Buffer) SeekStart() int64 {
 	prev := b.off
 	b.off = 0
 	return int64(prev)
 }
 
+// SeekEnd is a convenience method setting the buffer's offset to the buffer
+// length and returning the value it had before the method was called.
+func (b *Buffer) SeekEnd() int64 {
+	prev := b.off
+	b.off = len(b.buf)
+	return int64(prev)
+}
+
 // Truncate changes the size of the buffer discarding bytes at offsets greater
-// then size. It does not change the offset. It returns error os.ErrInvalid
+// then size. It does not change the offset unless Append option was used then
+// it sets offset to the end of the buffer. It returns error os.ErrInvalid
 // only when when size is negative.
 func (b *Buffer) Truncate(size int64) error {
 	if size < 0 {

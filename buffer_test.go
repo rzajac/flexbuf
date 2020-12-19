@@ -1258,6 +1258,18 @@ func Test_Buffer_SeekStart(t *testing.T) {
 	assert.Exactly(t, 0, buf.off)
 }
 
+func Test_Buffer_SeekEnd(t *testing.T) {
+	// --- Given ---
+	buf := With([]byte{0, 1, 2}, Offset(1))
+
+	// --- When ---
+	n := buf.SeekEnd()
+
+	// --- Then ---
+	assert.Exactly(t, int64(1), n)
+	assert.Exactly(t, len(buf.buf), buf.off)
+}
+
 func Test_Buffer_Truncate(t *testing.T) {
 	tt := []struct {
 		testN string
