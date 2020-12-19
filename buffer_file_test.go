@@ -13,8 +13,8 @@ import (
 
 // Tests in this file test Buffer behaves the same way as os.File.
 
-// comFileBuffer is an interface common to os.File and Buffer.
-type comFileBuffer interface {
+// filer is an interface common to os.File and Buffer.
+type filer interface {
 	io.Seeker
 	io.Reader
 	io.ReaderAt
@@ -28,740 +28,774 @@ type comFileBuffer interface {
 }
 
 func Test_File_ReadFrom_toEmpty(t *testing.T) {
-	tstFn := func(t *testing.T, buf comFileBuffer) {
-		// --- Given ---
-		src := bytes.Repeat([]byte{1, 2}, 500)
+	tt := []struct {
+		testN string
 
-		// --- When ---
-		n, err := buf.ReadFrom(bytes.NewBuffer(src))
-
-		// --- Then ---
-		assert.NoError(t, err)
-		assert.Exactly(t, int64(1000), n)
-		assert.Exactly(t, int64(1000), kit.CurrOffset(t, buf))
-		assert.Exactly(t, src, kit.ReadAllFromStart(t, buf))
-		assert.NoError(t, buf.Close())
+		buf filer
+	}{
+		{"fil", kit.TempFile(t, t.TempDir(), "")},
+		{"buf", &Buffer{}},
 	}
 
-	// Setup file.
-	tstFn(t, kit.TempFile(t, t.TempDir(), ""))
+	for _, tc := range tt {
+		t.Run(tc.testN, func(t *testing.T) {
+			// --- Given ---
+			src := bytes.Repeat([]byte{1, 2}, 500)
 
-	// Setup buffer.
-	tstFn(t, &Buffer{})
+			// --- When ---
+			n, err := tc.buf.ReadFrom(bytes.NewBuffer(src))
+
+			// --- Then ---
+			assert.NoError(t, err)
+			assert.Exactly(t, int64(1000), n)
+			assert.Exactly(t, int64(1000), kit.CurrOffset(t, tc.buf))
+			assert.Exactly(t, src, kit.ReadAllFromStart(t, tc.buf))
+			assert.NoError(t, tc.buf.Close())
+		})
+	}
 }
 
 func Test_File_ReadFrom_toFull(t *testing.T) {
-	testFn := func(t *testing.T, buf comFileBuffer) {
-		// --- Given ---
-		src := bytes.NewBuffer([]byte{3, 4, 5})
+	tt := []struct {
+		testN string
 
-		// --- When ---
-		n, err := buf.ReadFrom(src)
-
-		// --- Then ---
-		assert.NoError(t, err)
-		assert.Exactly(t, int64(3), n)
-		assert.Exactly(t, int64(6), kit.CurrOffset(t, buf))
-		want := []byte{0, 1, 2, 3, 4, 5}
-		assert.Exactly(t, want, kit.ReadAllFromStart(t, buf))
-		assert.NoError(t, buf.Close())
+		buf filer
+	}{
+		{"fil", TempFile(t, os.O_RDWR|os.O_APPEND, []byte{0, 1, 2})},
+		{"buf", With([]byte{0, 1, 2}, Append)},
 	}
 
-	// Setup file.
-	testFn(t, TempFile(t, os.O_RDWR|os.O_APPEND, []byte{0, 1, 2}))
+	for _, tc := range tt {
+		t.Run(tc.testN, func(t *testing.T) {
+			// --- Given ---
+			src := bytes.NewBuffer([]byte{3, 4, 5})
 
-	// Setup buffer.
-	testFn(t, With([]byte{0, 1, 2}, Append))
+			// --- When ---
+			n, err := tc.buf.ReadFrom(src)
+
+			// --- Then ---
+			assert.NoError(t, err)
+			assert.Exactly(t, int64(3), n)
+			assert.Exactly(t, int64(6), kit.CurrOffset(t, tc.buf))
+			want := []byte{0, 1, 2, 3, 4, 5}
+			assert.Exactly(t, want, kit.ReadAllFromStart(t, tc.buf))
+			assert.NoError(t, tc.buf.Close())
+		})
+	}
 }
 
 func Test_File_Write_append(t *testing.T) {
-	testFn := func(t *testing.T, buf comFileBuffer) {
-		// --- When ---
-		n, err := buf.Write([]byte{3, 4, 5})
+	tt := []struct {
+		testN string
 
-		// --- Then ---
-		assert.NoError(t, err)
-		assert.Exactly(t, 3, n)
-		assert.Exactly(t, int64(6), kit.CurrOffset(t, buf))
-		assert.Exactly(t, []byte{0, 1, 2, 3, 4, 5}, kit.ReadAllFromStart(t, buf))
-		assert.NoError(t, buf.Close())
+		buf filer
+	}{
+		{"fil", TempFile(t, os.O_RDWR|os.O_APPEND, []byte{0, 1, 2})},
+		{"buf", With([]byte{0, 1, 2}, Append)},
 	}
 
-	// Initial buffer value.
-	in := []byte{0, 1, 2}
+	for _, tc := range tt {
+		t.Run(tc.testN, func(t *testing.T) {
+			// --- When ---
+			n, err := tc.buf.Write([]byte{3, 4, 5})
 
-	// Setup file.
-	fil := TempFile(t, os.O_RDWR|os.O_APPEND, in)
-	testFn(t, fil)
+			// --- Then ---
+			assert.NoError(t, err)
+			assert.Exactly(t, 3, n)
+			assert.Exactly(t, int64(6), kit.CurrOffset(t, tc.buf))
 
-	// Setup buffer.
-	buf := With(in, Append)
-	testFn(t, buf)
+			exp := []byte{0, 1, 2, 3, 4, 5}
+			assert.Exactly(t, exp, kit.ReadAllFromStart(t, tc.buf))
+			assert.NoError(t, tc.buf.Close())
+		})
+	}
 }
 
 func Test_File_Write_overrideAndExtend(t *testing.T) {
-	testFn := func(t *testing.T, buf comFileBuffer) {
-		// --- Given ---
-		data := bytes.Repeat([]byte{0, 1}, 500)
-		kit.Seek(t, buf, 1, io.SeekStart)
+	tt := []struct {
+		testN string
 
-		// --- When ---
-		n, err := buf.Write(data)
-
-		// --- Then ---
-		assert.NoError(t, err)
-		assert.Exactly(t, 1000, n)
-		assert.Exactly(t, int64(1001), kit.CurrOffset(t, buf))
-		want := append([]byte{0}, data...)
-		assert.Exactly(t, want, kit.ReadAllFromStart(t, buf))
-		assert.NoError(t, buf.Close())
+		buf filer
+	}{
+		{"fil", TempFile(t, os.O_RDWR, []byte{0, 1, 2})},
+		{"buf", With([]byte{0, 1, 2})},
 	}
 
-	// Setup file.
-	testFn(t, TempFile(t, os.O_RDWR, []byte{0, 1, 2}))
+	for _, tc := range tt {
+		t.Run(tc.testN, func(t *testing.T) {
+			// --- Given ---
+			data := bytes.Repeat([]byte{0, 1}, 500)
+			kit.Seek(t, tc.buf, 1, io.SeekStart)
 
-	// Setup buffer.
-	testFn(t, With([]byte{0, 1, 2}))
+			// --- When ---
+			n, err := tc.buf.Write(data)
+
+			// --- Then ---
+			assert.NoError(t, err)
+			assert.Exactly(t, 1000, n)
+			assert.Exactly(t, int64(1001), kit.CurrOffset(t, tc.buf))
+			want := append([]byte{0}, data...)
+			assert.Exactly(t, want, kit.ReadAllFromStart(t, tc.buf))
+			assert.NoError(t, tc.buf.Close())
+		})
+	}
 }
 
 func Test_File_Write_overrideTail(t *testing.T) {
-	testFn := func(t *testing.T, buf comFileBuffer) {
-		// --- When ---
-		kit.Seek(t, buf, 1, io.SeekStart)
-		n, err := buf.Write([]byte{3, 4})
+	tt := []struct {
+		testN string
 
-		// --- Then ---
-		assert.NoError(t, err)
-		assert.Exactly(t, 2, n)
-		assert.Exactly(t, int64(3), kit.CurrOffset(t, buf))
-		assert.Exactly(t, []byte{0, 3, 4}, kit.ReadAllFromStart(t, buf))
-		assert.NoError(t, buf.Close())
+		buf filer
+	}{
+		{"fil", TempFile(t, os.O_RDWR, []byte{0, 1, 2})},
+		{"buf", With([]byte{0, 1, 2})},
 	}
 
-	// Initial buffer value.
-	in := []byte{0, 1, 2}
+	for _, tc := range tt {
+		t.Run(tc.testN, func(t *testing.T) {
+			// --- When ---
+			kit.Seek(t, tc.buf, 1, io.SeekStart)
+			n, err := tc.buf.Write([]byte{3, 4})
 
-	// Setup file.
-	fil := TempFile(t, os.O_RDWR, in)
-	testFn(t, fil)
-
-	// Setup buffer.
-	buf := With(in)
-	testFn(t, buf)
+			// --- Then ---
+			assert.NoError(t, err)
+			assert.Exactly(t, 2, n)
+			assert.Exactly(t, int64(3), kit.CurrOffset(t, tc.buf))
+			assert.Exactly(t, []byte{0, 3, 4}, kit.ReadAllFromStart(t, tc.buf))
+			assert.NoError(t, tc.buf.Close())
+		})
+	}
 }
 
 func Test_File_Write_overrideMiddle(t *testing.T) {
-	testFn := func(t *testing.T, buf comFileBuffer) {
-		// --- When ---
-		kit.Seek(t, buf, 1, io.SeekStart)
-		n, err := buf.Write([]byte{4, 5})
+	tt := []struct {
+		testN string
 
-		// --- Then ---
-		assert.NoError(t, err)
-		assert.Exactly(t, 2, n)
-		assert.Exactly(t, int64(3), kit.CurrOffset(t, buf))
-		assert.Exactly(t, []byte{0, 4, 5, 3}, kit.ReadAllFromStart(t, buf))
-		assert.NoError(t, buf.Close())
+		buf filer
+	}{
+		{"fil", TempFile(t, os.O_RDWR, []byte{0, 1, 2, 3})},
+		{"buf", With([]byte{0, 1, 2, 3})},
 	}
 
-	// Initial buffer value.
-	in := []byte{0, 1, 2, 3}
+	for _, tc := range tt {
+		t.Run(tc.testN, func(t *testing.T) {
+			// --- When ---
+			kit.Seek(t, tc.buf, 1, io.SeekStart)
+			n, err := tc.buf.Write([]byte{4, 5})
 
-	// Setup file.
-	fil := TempFile(t, os.O_RDWR, in)
-	testFn(t, fil)
+			// --- Then ---
+			assert.NoError(t, err)
+			assert.Exactly(t, 2, n)
+			assert.Exactly(t, int64(3), kit.CurrOffset(t, tc.buf))
 
-	// Setup buffer.
-	buf := With(in)
-	testFn(t, buf)
+			exp := []byte{0, 4, 5, 3}
+			assert.Exactly(t, exp, kit.ReadAllFromStart(t, tc.buf))
+			assert.NoError(t, tc.buf.Close())
+		})
+	}
 }
 
 func Test_File_WriteAt_zeroValue(t *testing.T) {
-	testFn := func(t *testing.T, buf comFileBuffer) {
-		// --- When ---
-		n, err := buf.WriteAt([]byte{0, 1, 2}, 0)
+	tt := []struct {
+		testN string
 
-		// --- Then ---
-		assert.NoError(t, err)
-		assert.Exactly(t, 3, n)
-		assert.Exactly(t, int64(0), kit.CurrOffset(t, buf))
-		want := []byte{0, 1, 2}
-		assert.Exactly(t, want, kit.ReadAllFromStart(t, buf))
-		assert.NoError(t, buf.Close())
+		buf filer
+	}{
+		{"fil", kit.TempFile(t, t.TempDir(), "")},
+		{"buf", &Buffer{}},
 	}
 
-	// Setup file.
-	fil := kit.TempFile(t, t.TempDir(), "")
-	testFn(t, fil)
+	for _, tc := range tt {
+		t.Run(tc.testN, func(t *testing.T) {
+			// --- When ---
+			n, err := tc.buf.WriteAt([]byte{0, 1, 2}, 0)
 
-	// Setup buffer.
-	buf := &Buffer{}
-	testFn(t, buf)
+			// --- Then ---
+			assert.NoError(t, err)
+			assert.Exactly(t, 3, n)
+			assert.Exactly(t, int64(0), kit.CurrOffset(t, tc.buf))
+			want := []byte{0, 1, 2}
+			assert.Exactly(t, want, kit.ReadAllFromStart(t, tc.buf))
+			assert.NoError(t, tc.buf.Close())
+		})
+	}
 }
 
 func Test_File_WriteAt_beyondCap(t *testing.T) {
-	testFn := func(t *testing.T, buf comFileBuffer) {
-		// --- When ---
-		n, err := buf.WriteAt([]byte{3, 4, 5}, 1000)
+	tt := []struct {
+		testN string
 
-		// --- Then ---
-		assert.NoError(t, err)
-		assert.Exactly(t, 3, n)
-		assert.Exactly(t, int64(0), kit.CurrOffset(t, buf))
-		want := append([]byte{0, 1, 2}, bytes.Repeat([]byte{0}, 997)...)
-		want = append(want, []byte{3, 4, 5}...)
-		assert.Exactly(t, want, kit.ReadAllFromStart(t, buf))
-		assert.NoError(t, buf.Close())
+		buf filer
+	}{
+		{"fil", TempFile(t, os.O_RDWR, []byte{0, 1, 2})},
+		{"buf", With([]byte{0, 1, 2})},
 	}
 
-	// Initial buffer value.
-	in := []byte{0, 1, 2}
+	for _, tc := range tt {
+		t.Run(tc.testN, func(t *testing.T) {
+			// --- When ---
+			n, err := tc.buf.WriteAt([]byte{3, 4, 5}, 1000)
 
-	// Setup file.
-	fil := TempFile(t, os.O_RDWR, in)
-	testFn(t, fil)
-
-	// Setup buffer.
-	buf := With(in)
-	testFn(t, buf)
+			// --- Then ---
+			assert.NoError(t, err)
+			assert.Exactly(t, 3, n)
+			assert.Exactly(t, int64(0), kit.CurrOffset(t, tc.buf))
+			want := append([]byte{0, 1, 2}, bytes.Repeat([]byte{0}, 997)...)
+			want = append(want, []byte{3, 4, 5}...)
+			assert.Exactly(t, want, kit.ReadAllFromStart(t, tc.buf))
+			assert.NoError(t, tc.buf.Close())
+		})
+	}
 }
 
 func Test_File_WriteAt_append(t *testing.T) {
-	testFn := func(t *testing.T, buf comFileBuffer) {
-		// --- When ---
-		n, err := buf.WriteAt([]byte{3, 4, 5}, 3)
+	tt := []struct {
+		testN string
 
-		// --- Then ---
-		assert.NoError(t, err)
-		assert.Exactly(t, 3, n)
-		assert.Exactly(t, int64(0), kit.CurrOffset(t, buf))
-		assert.Exactly(t, []byte{0, 1, 2, 3, 4, 5}, kit.ReadAllFromStart(t, buf))
-		assert.NoError(t, buf.Close())
+		buf filer
+	}{
+		{"fil", TempFile(t, os.O_RDWR, []byte{0, 1, 2})},
+		{"buf", With([]byte{0, 1, 2})},
 	}
 
-	// Initial buffer value.
-	in := []byte{0, 1, 2}
+	for _, tc := range tt {
+		t.Run(tc.testN, func(t *testing.T) {
+			// --- When ---
+			n, err := tc.buf.WriteAt([]byte{3, 4, 5}, 3)
 
-	// Setup file.
-	fil := TempFile(t, os.O_RDWR, in)
-	testFn(t, fil)
+			// --- Then ---
+			assert.NoError(t, err)
+			assert.Exactly(t, 3, n)
+			assert.Exactly(t, int64(0), kit.CurrOffset(t, tc.buf))
 
-	// Setup buffer.
-	buf := With(in)
-	testFn(t, buf)
+			exp := []byte{0, 1, 2, 3, 4, 5}
+			assert.Exactly(t, exp, kit.ReadAllFromStart(t, tc.buf))
+			assert.NoError(t, tc.buf.Close())
+		})
+	}
 }
 
 func Test_File_WriteAt_overrideAndExtend(t *testing.T) {
-	testFn := func(t *testing.T, buf comFileBuffer) {
-		// --- When ---
-		data := bytes.Repeat([]byte{0, 1}, 500)
-		n, err := buf.WriteAt(data, 1)
+	tt := []struct {
+		testN string
 
-		// --- Then ---
-		assert.NoError(t, err)
-		assert.Exactly(t, 1000, n)
-		assert.Exactly(t, int64(0), kit.CurrOffset(t, buf))
-		want := append([]byte{0}, bytes.Repeat([]byte{0, 1}, 500)...)
-		assert.Exactly(t, want, kit.ReadAllFromStart(t, buf))
-		assert.NoError(t, buf.Close())
+		buf filer
+	}{
+		{"fil", TempFile(t, os.O_RDWR, []byte{0, 1, 2})},
+		{"buf", With([]byte{0, 1, 2})},
 	}
 
-	// Initial buffer value.
-	in := []byte{0, 1, 2}
+	for _, tc := range tt {
+		t.Run(tc.testN, func(t *testing.T) {
+			// --- When ---
+			data := bytes.Repeat([]byte{0, 1}, 500)
+			n, err := tc.buf.WriteAt(data, 1)
 
-	// Setup file.
-	fil := TempFile(t, os.O_RDWR, in)
-	testFn(t, fil)
-
-	// Setup buffer.
-	buf := With(in)
-	testFn(t, buf)
+			// --- Then ---
+			assert.NoError(t, err)
+			assert.Exactly(t, 1000, n)
+			assert.Exactly(t, int64(0), kit.CurrOffset(t, tc.buf))
+			want := append([]byte{0}, bytes.Repeat([]byte{0, 1}, 500)...)
+			assert.Exactly(t, want, kit.ReadAllFromStart(t, tc.buf))
+			assert.NoError(t, tc.buf.Close())
+		})
+	}
 }
 
 func Test_File_WriteAt_overrideTail(t *testing.T) {
-	testFn := func(t *testing.T, buf comFileBuffer) {
-		// --- When ---
-		kit.Seek(t, buf, 2, io.SeekStart)
-		n, err := buf.WriteAt([]byte{3, 4}, 1)
+	tt := []struct {
+		testN string
 
-		// --- Then ---
-		assert.NoError(t, err)
-		assert.Exactly(t, 2, n)
-		assert.Exactly(t, int64(2), kit.CurrOffset(t, buf))
-		assert.Exactly(t, []byte{0, 3, 4}, kit.ReadAllFromStart(t, buf))
-		assert.NoError(t, buf.Close())
+		buf filer
+	}{
+		{"fil", TempFile(t, os.O_RDWR, []byte{0, 1, 2})},
+		{"buf", With([]byte{0, 1, 2})},
 	}
 
-	// Initial buffer value.
-	in := []byte{0, 1, 2}
+	for _, tc := range tt {
+		t.Run(tc.testN, func(t *testing.T) {
+			// --- When ---
+			kit.Seek(t, tc.buf, 2, io.SeekStart)
+			n, err := tc.buf.WriteAt([]byte{3, 4}, 1)
 
-	// Setup file.
-	fil := TempFile(t, os.O_RDWR, in)
-	testFn(t, fil)
-
-	// Setup buffer.
-	buf := With(in)
-	testFn(t, buf)
+			// --- Then ---
+			assert.NoError(t, err)
+			assert.Exactly(t, 2, n)
+			assert.Exactly(t, int64(2), kit.CurrOffset(t, tc.buf))
+			assert.Exactly(t, []byte{0, 3, 4}, kit.ReadAllFromStart(t, tc.buf))
+			assert.NoError(t, tc.buf.Close())
+		})
+	}
 }
 
 func Test_File_WriteAt_overrideMiddle(t *testing.T) {
-	testFn := func(t *testing.T, buf comFileBuffer) {
-		// --- When ---
-		kit.Seek(t, buf, 2, io.SeekStart)
-		n, err := buf.WriteAt([]byte{4, 5}, 1)
+	tt := []struct {
+		testN string
 
-		// --- Then ---
-		assert.NoError(t, err)
-		assert.Exactly(t, 2, n)
-		assert.Exactly(t, int64(2), kit.CurrOffset(t, buf))
-		assert.Exactly(t, []byte{0, 4, 5, 3}, kit.ReadAllFromStart(t, buf))
-		assert.NoError(t, buf.Close())
+		buf filer
+	}{
+		{"fil", TempFile(t, os.O_RDWR, []byte{0, 1, 2, 3})},
+		{"buf", With([]byte{0, 1, 2, 3})},
 	}
 
-	// Initial buffer value.
-	in := []byte{0, 1, 2, 3}
+	for _, tc := range tt {
+		t.Run(tc.testN, func(t *testing.T) {
+			// --- When ---
+			kit.Seek(t, tc.buf, 2, io.SeekStart)
+			n, err := tc.buf.WriteAt([]byte{4, 5}, 1)
 
-	// Setup file.
-	fil := TempFile(t, os.O_RDWR, in)
-	testFn(t, fil)
+			// --- Then ---
+			assert.NoError(t, err)
+			assert.Exactly(t, 2, n)
+			assert.Exactly(t, int64(2), kit.CurrOffset(t, tc.buf))
 
-	// Setup buffer.
-	buf := With(in)
-	testFn(t, buf)
+			exp := []byte{0, 4, 5, 3}
+			assert.Exactly(t, exp, kit.ReadAllFromStart(t, tc.buf))
+			assert.NoError(t, tc.buf.Close())
+		})
+	}
 }
 
 func Test_File_WriteAt_writeAtOffsetBeyondCap(t *testing.T) {
-	testFn := func(t *testing.T, buf comFileBuffer) {
-		// --- When ---
-		kit.Seek(t, buf, 0, io.SeekStart)
-		n, err := buf.WriteAt([]byte{1, 2}, 8)
+	tt := []struct {
+		testN string
 
-		// --- Then ---
-		assert.NoError(t, err)
-		assert.Exactly(t, 2, n)
-		assert.Exactly(t, int64(0), kit.CurrOffset(t, buf))
-		assert.Exactly(t, []byte{0, 0, 0, 0, 0, 0, 0, 0, 1, 2}, kit.ReadAllFromStart(t, buf))
-		assert.NoError(t, buf.Close())
+		buf filer
+	}{
+		{"fil", TempFile(t, os.O_RDWR, make([]byte, 3, 6))},
+		{"buf", With(make([]byte, 3, 6))},
 	}
 
-	// Initial buffer value.
-	in := make([]byte, 3, 6)
+	for _, tc := range tt {
+		t.Run(tc.testN, func(t *testing.T) {
+			// --- When ---
+			kit.Seek(t, tc.buf, 0, io.SeekStart)
+			n, err := tc.buf.WriteAt([]byte{1, 2}, 8)
 
-	// Setup file.
-	fil := TempFile(t, os.O_RDWR, in)
-	testFn(t, fil)
+			// --- Then ---
+			assert.NoError(t, err)
+			assert.Exactly(t, 2, n)
+			assert.Exactly(t, int64(0), kit.CurrOffset(t, tc.buf))
 
-	// Setup buffer.
-	buf := With(in)
-	testFn(t, buf)
+			exp := []byte{0, 0, 0, 0, 0, 0, 0, 0, 1, 2}
+			assert.Exactly(t, exp, kit.ReadAllFromStart(t, tc.buf))
+			assert.NoError(t, tc.buf.Close())
+		})
+	}
 }
 
 func Test_File_WriteAt_writeAtOffsetBeyondCapOffsetCloseToLen(t *testing.T) {
-	testFn := func(t *testing.T, buf comFileBuffer) {
-		// --- When ---
-		kit.Seek(t, buf, 4, io.SeekStart)
-		n, err := buf.WriteAt([]byte{1, 2}, 8)
+	tt := []struct {
+		testN string
 
-		// --- Then ---
-		assert.NoError(t, err)
-		assert.Exactly(t, 2, n)
-		assert.Exactly(t, int64(4), kit.CurrOffset(t, buf))
-		assert.Exactly(t, []byte{0, 0, 0, 0, 0, 0, 0, 0, 1, 2}, kit.ReadAllFromStart(t, buf))
-		assert.NoError(t, buf.Close())
+		buf filer
+	}{
+		{"fil", TempFile(t, os.O_RDWR, make([]byte, 5, 7))},
+		{"buf", With(make([]byte, 5, 7))},
 	}
 
-	// Initial buffer value.
-	in := make([]byte, 5, 7)
+	for _, tc := range tt {
+		t.Run(tc.testN, func(t *testing.T) {
+			// --- When ---
+			kit.Seek(t, tc.buf, 4, io.SeekStart)
+			n, err := tc.buf.WriteAt([]byte{1, 2}, 8)
 
-	// Setup file.
-	fil := TempFile(t, os.O_RDWR, in)
-	testFn(t, fil)
+			// --- Then ---
+			assert.NoError(t, err)
+			assert.Exactly(t, 2, n)
+			assert.Exactly(t, int64(4), kit.CurrOffset(t, tc.buf))
 
-	// Setup buffer.
-	buf := With(in)
-	testFn(t, buf)
+			exp := []byte{0, 0, 0, 0, 0, 0, 0, 0, 1, 2}
+			assert.Exactly(t, exp, kit.ReadAllFromStart(t, tc.buf))
+			assert.NoError(t, tc.buf.Close())
+		})
+	}
 }
 
 func Test_File_WriteString(t *testing.T) {
-	testFn := func(t *testing.T, buf comFileBuffer) {
-		// --- Given ---
-		kit.Seek(t, buf, 1, io.SeekStart)
+	tt := []struct {
+		testN string
 
-		// --- When ---
-		n, err := buf.WriteString("abc")
-
-		// --- Then ---
-		assert.NoError(t, err)
-		assert.Exactly(t, 3, n)
-		assert.Exactly(t, []byte{0, 0x61, 0x62, 0x63}, kit.ReadAllFromStart(t, buf))
-		assert.Exactly(t, int64(4), kit.CurrOffset(t, buf))
+		buf filer
+	}{
+		{"fil", TempFile(t, os.O_RDWR, []byte{0, 1, 2})},
+		{"buf", With([]byte{0, 1, 2})},
 	}
 
-	// Initial buffer value.
-	in := []byte{0, 1, 2}
+	for _, tc := range tt {
+		t.Run(tc.testN, func(t *testing.T) {
+			// --- Given ---
+			kit.Seek(t, tc.buf, 1, io.SeekStart)
 
-	// Setup file.
-	fil := TempFile(t, os.O_RDWR, in)
-	testFn(t, fil)
+			// --- When ---
+			n, err := tc.buf.WriteString("abc")
 
-	// Setup buffer.
-	buf := With(in)
-	testFn(t, buf)
+			// --- Then ---
+			assert.NoError(t, err)
+			assert.Exactly(t, 3, n)
 
+			exp := []byte{0, 0x61, 0x62, 0x63}
+			assert.Exactly(t, exp, kit.ReadAllFromStart(t, tc.buf))
+			assert.Exactly(t, int64(4), kit.CurrOffset(t, tc.buf))
+		})
+	}
 }
 
 func Test_File_Read_zeroValue(t *testing.T) {
-	testFn := func(t *testing.T, buf comFileBuffer) {
-		// --- When ---
-		dst := make([]byte, 3)
-		n, err := buf.Read(dst)
+	tt := []struct {
+		testN string
 
-		// --- Then ---
-		assert.ErrorIs(t, err, io.EOF)
-		assert.Exactly(t, 0, n)
-		assert.Exactly(t, int64(0), kit.CurrOffset(t, buf))
-		want := []byte{0, 0, 0}
-		assert.Exactly(t, want, dst)
-		assert.NoError(t, buf.Close())
+		buf filer
+	}{
+		{"fil", kit.TempFile(t, t.TempDir(), "")},
+		{"buf", &Buffer{}},
 	}
 
-	// Setup file.
-	fil := kit.TempFile(t, t.TempDir(), "")
-	testFn(t, fil)
+	for _, tc := range tt {
+		t.Run(tc.testN, func(t *testing.T) {
+			// --- When ---
+			dst := make([]byte, 3)
+			n, err := tc.buf.Read(dst)
 
-	// Setup buffer.
-	buf := &Buffer{}
-	testFn(t, buf)
+			// --- Then ---
+			assert.ErrorIs(t, err, io.EOF)
+			assert.Exactly(t, 0, n)
+			assert.Exactly(t, int64(0), kit.CurrOffset(t, tc.buf))
+			want := []byte{0, 0, 0}
+			assert.Exactly(t, want, dst)
+			assert.NoError(t, tc.buf.Close())
+		})
+	}
 }
 
 func Test_File_Read_withSmallBuffer(t *testing.T) {
-	testFn := func(t *testing.T, buf comFileBuffer) {
-		// --- Given ---
-		dst := make([]byte, 3)
+	tt := []struct {
+		testN string
 
-		// --- Then ---
-
-		// First read.
-		n, err := buf.Read(dst)
-
-		assert.NoError(t, err)
-		assert.Exactly(t, 3, n)
-		assert.Exactly(t, int64(3), kit.CurrOffset(t, buf))
-		want := []byte{0, 1, 2}
-		assert.Exactly(t, want, dst)
-
-		// Second read.
-		n, err = buf.Read(dst)
-
-		assert.NoError(t, err)
-		assert.Exactly(t, 2, n)
-		assert.Exactly(t, int64(5), kit.CurrOffset(t, buf))
-		want = []byte{3, 4, 2}
-		assert.Exactly(t, want, dst)
-
-		// Third read.
-		n, err = buf.Read(dst)
-
-		assert.ErrorIs(t, err, io.EOF)
-		assert.Exactly(t, 0, n)
-		assert.Exactly(t, int64(5), kit.CurrOffset(t, buf))
-		want = []byte{3, 4, 2}
-		assert.Exactly(t, want, dst)
-
-		assert.NoError(t, buf.Close())
+		buf filer
+	}{
+		{"fil", TempFile(t, os.O_RDONLY, []byte{0, 1, 2, 3, 4})},
+		{"buf", With([]byte{0, 1, 2, 3, 4})},
 	}
 
-	// Initial buffer value.
-	in := []byte{0, 1, 2, 3, 4}
+	for _, tc := range tt {
+		t.Run(tc.testN, func(t *testing.T) {
+			// --- Given ---
+			dst := make([]byte, 3)
 
-	// Setup file.
-	fil := TempFile(t, os.O_RDONLY, in)
-	testFn(t, fil)
+			// --- Then ---
 
-	// Setup buffer.
-	buf := With(in)
-	testFn(t, buf)
+			// First read.
+			n, err := tc.buf.Read(dst)
+
+			assert.NoError(t, err)
+			assert.Exactly(t, 3, n)
+			assert.Exactly(t, int64(3), kit.CurrOffset(t, tc.buf))
+			want := []byte{0, 1, 2}
+			assert.Exactly(t, want, dst)
+
+			// Second read.
+			n, err = tc.buf.Read(dst)
+
+			assert.NoError(t, err)
+			assert.Exactly(t, 2, n)
+			assert.Exactly(t, int64(5), kit.CurrOffset(t, tc.buf))
+			want = []byte{3, 4, 2}
+			assert.Exactly(t, want, dst)
+
+			// Third read.
+			n, err = tc.buf.Read(dst)
+
+			assert.ErrorIs(t, err, io.EOF)
+			assert.Exactly(t, 0, n)
+			assert.Exactly(t, int64(5), kit.CurrOffset(t, tc.buf))
+			want = []byte{3, 4, 2}
+			assert.Exactly(t, want, dst)
+
+			assert.NoError(t, tc.buf.Close())
+		})
+	}
 }
 
 func Test_File_Read_beyondLen(t *testing.T) {
-	testFn := func(t *testing.T, buf comFileBuffer) {
-		kit.Seek(t, buf, 5, io.SeekStart)
+	tt := []struct {
+		testN string
 
-		// --- When ---
-		dst := make([]byte, 3)
-		n, err := buf.Read(dst)
-
-		// --- Then ---
-		assert.ErrorIs(t, err, io.EOF)
-		assert.Exactly(t, 0, n)
-		assert.Exactly(t, int64(5), kit.CurrOffset(t, buf))
-		want := []byte{0, 0, 0}
-		assert.Exactly(t, want, dst)
-		assert.NoError(t, buf.Close())
+		buf filer
+	}{
+		{"fil", TempFile(t, os.O_RDWR, []byte{0, 1, 2})},
+		{"buf", With([]byte{0, 1, 2})},
 	}
 
-	// Initial buffer value.
-	in := []byte{0, 1, 2}
+	for _, tc := range tt {
+		t.Run(tc.testN, func(t *testing.T) {
+			kit.Seek(t, tc.buf, 5, io.SeekStart)
 
-	// Setup file.
-	fil := TempFile(t, os.O_RDWR, in)
-	testFn(t, fil)
+			// --- When ---
+			dst := make([]byte, 3)
+			n, err := tc.buf.Read(dst)
 
-	// Setup buffer.
-	buf := With(in)
-	testFn(t, buf)
+			// --- Then ---
+			assert.ErrorIs(t, err, io.EOF)
+			assert.Exactly(t, 0, n)
+			assert.Exactly(t, int64(5), kit.CurrOffset(t, tc.buf))
+			want := []byte{0, 0, 0}
+			assert.Exactly(t, want, dst)
+			assert.NoError(t, tc.buf.Close())
+		})
+	}
 }
 
 func Test_File_Read_bigBuffer(t *testing.T) {
-	testFn := func(t *testing.T, buf comFileBuffer) {
-		// --- When ---
-		dst := make([]byte, 6)
-		n, err := buf.Read(dst)
+	tt := []struct {
+		testN string
 
-		// --- Then ---
-		assert.NoError(t, err)
-		assert.Exactly(t, 3, n)
-		assert.Exactly(t, int64(3), kit.CurrOffset(t, buf))
-		want := []byte{0, 1, 2, 0, 0, 0}
-		assert.Exactly(t, want, dst)
-		assert.NoError(t, buf.Close())
+		buf filer
+	}{
+		{"fil", TempFile(t, os.O_RDWR, []byte{0, 1, 2})},
+		{"buf", With([]byte{0, 1, 2})},
 	}
 
-	// Initial buffer value.
-	in := []byte{0, 1, 2}
+	for _, tc := range tt {
+		t.Run(tc.testN, func(t *testing.T) {
+			// --- When ---
+			dst := make([]byte, 6)
+			n, err := tc.buf.Read(dst)
 
-	// Setup file.
-	fil := TempFile(t, os.O_RDWR, in)
-	testFn(t, fil)
-
-	// Setup buffer.
-	buf := With(in)
-	testFn(t, buf)
+			// --- Then ---
+			assert.NoError(t, err)
+			assert.Exactly(t, 3, n)
+			assert.Exactly(t, int64(3), kit.CurrOffset(t, tc.buf))
+			want := []byte{0, 1, 2, 0, 0, 0}
+			assert.Exactly(t, want, dst)
+			assert.NoError(t, tc.buf.Close())
+		})
+	}
 }
 
 func Test_File_Read_readAll(t *testing.T) {
-	testFn := func(t *testing.T, buf comFileBuffer) {
-		dst := make([]byte, 3, 4)
+	tt := []struct {
+		testN string
 
-		// --- When ---
-		n, err := buf.Read(dst)
-
-		// --- Then ---
-		assert.NoError(t, err)
-		assert.Exactly(t, 3, n)
-		assert.Exactly(t, int64(3), kit.CurrOffset(t, buf))
-		assert.Exactly(t, []byte{0, 1, 2}, dst)
-		assert.NoError(t, buf.Close())
+		buf filer
+	}{
+		{"fil", TempFile(t, os.O_RDWR, []byte{0, 1, 2})},
+		{"buf", With([]byte{0, 1, 2})},
 	}
 
-	// Initial buffer value.
-	in := []byte{0, 1, 2}
+	for _, tc := range tt {
+		t.Run(tc.testN, func(t *testing.T) {
+			dst := make([]byte, 3, 4)
 
-	// Setup file.
-	fil := TempFile(t, os.O_RDWR, in)
-	testFn(t, fil)
+			// --- When ---
+			n, err := tc.buf.Read(dst)
 
-	// Setup buffer.
-	buf := With(in)
-	testFn(t, buf)
+			// --- Then ---
+			assert.NoError(t, err)
+			assert.Exactly(t, 3, n)
+			assert.Exactly(t, int64(3), kit.CurrOffset(t, tc.buf))
+			assert.Exactly(t, []byte{0, 1, 2}, dst)
+			assert.NoError(t, tc.buf.Close())
+		})
+	}
 }
 
 func Test_File_Read_readHead(t *testing.T) {
-	testFn := func(t *testing.T, buf comFileBuffer) {
-		dst := make([]byte, 3, 4)
+	tt := []struct {
+		testN string
 
-		// --- When ---
-		n, err := buf.Read(dst)
-
-		// --- Then ---
-		assert.NoError(t, err)
-		assert.Exactly(t, 3, n)
-		assert.Exactly(t, int64(3), kit.CurrOffset(t, buf))
-		assert.Exactly(t, []byte{0, 1, 2}, dst)
-		assert.NoError(t, buf.Close())
+		buf filer
+	}{
+		{"fil", TempFile(t, os.O_RDWR, []byte{0, 1, 2, 4})},
+		{"buf", With([]byte{0, 1, 2, 4})},
 	}
 
-	// Initial buffer value.
-	in := []byte{0, 1, 2, 4}
+	for _, tc := range tt {
+		t.Run(tc.testN, func(t *testing.T) {
+			dst := make([]byte, 3, 4)
 
-	// Setup file.
-	fil := TempFile(t, os.O_RDWR, in)
-	testFn(t, fil)
+			// --- When ---
+			n, err := tc.buf.Read(dst)
 
-	// Setup buffer.
-	buf := With(in)
-	testFn(t, buf)
+			// --- Then ---
+			assert.NoError(t, err)
+			assert.Exactly(t, 3, n)
+			assert.Exactly(t, int64(3), kit.CurrOffset(t, tc.buf))
+			assert.Exactly(t, []byte{0, 1, 2}, dst)
+			assert.NoError(t, tc.buf.Close())
+		})
+	}
 }
 
 func Test_File_Read_readTail(t *testing.T) {
-	testFn := func(t *testing.T, buf comFileBuffer) {
-		kit.Seek(t, buf, 1, io.SeekStart)
-		dst := make([]byte, 2, 3)
+	tt := []struct {
+		testN string
 
-		// --- When ---
-		n, err := buf.Read(dst)
-
-		// --- Then ---
-		assert.NoError(t, err)
-		assert.Exactly(t, 2, n)
-		assert.Exactly(t, int64(3), kit.CurrOffset(t, buf))
-		assert.Exactly(t, []byte{1, 2}, dst)
-		assert.NoError(t, buf.Close())
+		buf filer
+	}{
+		{"fil", TempFile(t, os.O_RDWR, []byte{0, 1, 2})},
+		{"buf", With([]byte{0, 1, 2})},
 	}
 
-	// Initial buffer value.
-	in := []byte{0, 1, 2}
+	for _, tc := range tt {
+		t.Run(tc.testN, func(t *testing.T) {
+			kit.Seek(t, tc.buf, 1, io.SeekStart)
+			dst := make([]byte, 2, 3)
 
-	// Setup file.
-	fil := TempFile(t, os.O_RDWR, in)
-	testFn(t, fil)
+			// --- When ---
+			n, err := tc.buf.Read(dst)
 
-	// Setup buffer.
-	buf := With(in)
-	testFn(t, buf)
+			// --- Then ---
+			assert.NoError(t, err)
+			assert.Exactly(t, 2, n)
+			assert.Exactly(t, int64(3), kit.CurrOffset(t, tc.buf))
+			assert.Exactly(t, []byte{1, 2}, dst)
+			assert.NoError(t, tc.buf.Close())
+		})
+	}
 }
 
 func Test_File_ReadAt_beyondLen(t *testing.T) {
-	testFn := func(t *testing.T, buf comFileBuffer) {
-		// --- When ---
-		dst := make([]byte, 4)
-		n, err := buf.ReadAt(dst, 6)
+	tt := []struct {
+		testN string
 
-		// --- Then ---
-		assert.ErrorIs(t, err, io.EOF)
-		assert.Exactly(t, 0, n)
-		assert.Exactly(t, int64(0), kit.CurrOffset(t, buf))
-		want := []byte{0, 0, 0, 0}
-		assert.Exactly(t, want, dst)
-		assert.NoError(t, buf.Close())
+		buf filer
+	}{
+		{"fil", TempFile(t, os.O_RDWR, []byte{0, 1, 2})},
+		{"buf", With([]byte{0, 1, 2})},
 	}
 
-	// Initial buffer value.
-	in := []byte{0, 1, 2}
+	for _, tc := range tt {
+		t.Run(tc.testN, func(t *testing.T) {
+			// --- When ---
+			dst := make([]byte, 4)
+			n, err := tc.buf.ReadAt(dst, 6)
 
-	// Setup file.
-	fil := TempFile(t, os.O_RDWR, in)
-	testFn(t, fil)
-
-	// Setup buffer.
-	buf := With(in)
-	testFn(t, buf)
+			// --- Then ---
+			assert.ErrorIs(t, err, io.EOF)
+			assert.Exactly(t, 0, n)
+			assert.Exactly(t, int64(0), kit.CurrOffset(t, tc.buf))
+			want := []byte{0, 0, 0, 0}
+			assert.Exactly(t, want, dst)
+			assert.NoError(t, tc.buf.Close())
+		})
+	}
 }
 
 func Test_File_ReadAt_bigBuffer(t *testing.T) {
-	testFn := func(t *testing.T, buf comFileBuffer) {
-		kit.Seek(t, buf, 1, io.SeekStart)
-		dst := make([]byte, 4)
+	tt := []struct {
+		testN string
 
-		// --- When ---
-		n, err := buf.ReadAt(dst, 0)
-
-		// --- Then ---
-		assert.ErrorIs(t, err, io.EOF)
-		assert.Exactly(t, 3, n)
-		assert.Exactly(t, int64(1), kit.CurrOffset(t, buf))
-		want := []byte{0, 1, 2, 0}
-		assert.Exactly(t, want, dst)
-		assert.NoError(t, buf.Close())
+		buf filer
+	}{
+		{"fil", TempFile(t, os.O_RDWR, []byte{0, 1, 2})},
+		{"buf", With([]byte{0, 1, 2})},
 	}
 
-	// Initial buffer value.
-	in := []byte{0, 1, 2}
+	for _, tc := range tt {
+		t.Run(tc.testN, func(t *testing.T) {
+			kit.Seek(t, tc.buf, 1, io.SeekStart)
+			dst := make([]byte, 4)
 
-	// Setup file.
-	fil := TempFile(t, os.O_RDWR, in)
-	testFn(t, fil)
+			// --- When ---
+			n, err := tc.buf.ReadAt(dst, 0)
 
-	// Setup buffer.
-	buf := With(in)
-	testFn(t, buf)
+			// --- Then ---
+			assert.ErrorIs(t, err, io.EOF)
+			assert.Exactly(t, 3, n)
+			assert.Exactly(t, int64(1), kit.CurrOffset(t, tc.buf))
+			want := []byte{0, 1, 2, 0}
+			assert.Exactly(t, want, dst)
+			assert.NoError(t, tc.buf.Close())
+		})
+	}
 }
 
 func Test_File_ReadAt_readAll(t *testing.T) {
-	testFn := func(t *testing.T, buf comFileBuffer) {
-		// --- Given ---
-		kit.Seek(t, buf, 1, io.SeekStart)
-		dst := []byte{0, 1, 2}
+	tt := []struct {
+		testN string
 
-		// --- When ---
-		n, err := buf.ReadAt(dst, 0)
-
-		// --- Then ---
-		assert.NoError(t, err)
-		assert.Exactly(t, 3, n)
-		assert.Exactly(t, int64(1), kit.CurrOffset(t, buf))
-		assert.Exactly(t, []byte{0, 1, 2}, dst)
-		assert.NoError(t, buf.Close())
+		buf filer
+	}{
+		{"fil", TempFile(t, os.O_RDWR, []byte{0, 1, 2})},
+		{"buf", With([]byte{0, 1, 2})},
 	}
 
-	// Initial buffer value.
-	in := []byte{0, 1, 2}
+	for _, tc := range tt {
+		t.Run(tc.testN, func(t *testing.T) {
+			// --- Given ---
+			kit.Seek(t, tc.buf, 1, io.SeekStart)
+			dst := []byte{0, 1, 2}
 
-	// Setup file.
-	fil := TempFile(t, os.O_RDWR, in)
-	testFn(t, fil)
+			// --- When ---
+			n, err := tc.buf.ReadAt(dst, 0)
 
-	// Setup buffer.
-	buf := With(in)
-	testFn(t, buf)
+			// --- Then ---
+			assert.NoError(t, err)
+			assert.Exactly(t, 3, n)
+			assert.Exactly(t, int64(1), kit.CurrOffset(t, tc.buf))
+			assert.Exactly(t, []byte{0, 1, 2}, dst)
+			assert.NoError(t, tc.buf.Close())
+		})
+	}
 }
 
 func Test_File_ReadAt_readHead(t *testing.T) {
-	testFn := func(t *testing.T, buf comFileBuffer) {
-		// --- Given ---
-		kit.Seek(t, buf, 1, io.SeekStart)
-		dst := make([]byte, 2, 3)
+	tt := []struct {
+		testN string
 
-		// --- When ---
-		n, err := buf.ReadAt(dst, 0)
-
-		// --- Then ---
-		assert.NoError(t, err)
-		assert.Exactly(t, 2, n)
-		assert.Exactly(t, int64(1), kit.CurrOffset(t, buf))
-		assert.Exactly(t, []byte{0, 1}, dst)
-		assert.NoError(t, buf.Close())
+		buf filer
+	}{
+		{"fil", TempFile(t, os.O_RDWR, []byte{0, 1, 2})},
+		{"buf", With([]byte{0, 1, 2})},
 	}
 
-	// Initial buffer value.
-	in := []byte{0, 1, 2}
+	for _, tc := range tt {
+		t.Run(tc.testN, func(t *testing.T) {
+			// --- Given ---
+			kit.Seek(t, tc.buf, 1, io.SeekStart)
+			dst := make([]byte, 2, 3)
 
-	// Setup file.
-	fil := TempFile(t, os.O_RDWR, in)
-	testFn(t, fil)
+			// --- When ---
+			n, err := tc.buf.ReadAt(dst, 0)
 
-	// Setup buffer.
-	buf := With(in)
-	testFn(t, buf)
+			// --- Then ---
+			assert.NoError(t, err)
+			assert.Exactly(t, 2, n)
+			assert.Exactly(t, int64(1), kit.CurrOffset(t, tc.buf))
+			assert.Exactly(t, []byte{0, 1}, dst)
+			assert.NoError(t, tc.buf.Close())
+		})
+	}
 }
 
 func Test_File_ReadAt_readTail(t *testing.T) {
-	testFn := func(t *testing.T, buf comFileBuffer) {
-		// --- Given ---
-		kit.Seek(t, buf, 2, io.SeekStart)
-		dst := make([]byte, 2, 3)
+	tt := []struct {
+		testN string
 
-		// --- When ---
-		n, err := buf.ReadAt(dst, 1)
-
-		// --- Then ---
-		assert.NoError(t, err)
-		assert.Exactly(t, 2, n)
-		assert.Exactly(t, int64(2), kit.CurrOffset(t, buf))
-		assert.Exactly(t, []byte{1, 2}, dst)
-		assert.NoError(t, buf.Close())
+		buf filer
+	}{
+		{"fil", TempFile(t, os.O_RDWR, []byte{0, 1, 2})},
+		{"buf", With([]byte{0, 1, 2})},
 	}
 
-	// Initial buffer value.
-	in := []byte{0, 1, 2}
+	for _, tc := range tt {
+		t.Run(tc.testN, func(t *testing.T) {
+			// --- Given ---
+			kit.Seek(t, tc.buf, 2, io.SeekStart)
+			dst := make([]byte, 2, 3)
 
-	// Setup file.
-	fil := TempFile(t, os.O_RDWR, in)
-	testFn(t, fil)
+			// --- When ---
+			n, err := tc.buf.ReadAt(dst, 1)
 
-	// Setup buffer.
-	buf := With(in)
-	testFn(t, buf)
+			// --- Then ---
+			assert.NoError(t, err)
+			assert.Exactly(t, 2, n)
+			assert.Exactly(t, int64(2), kit.CurrOffset(t, tc.buf))
+			assert.Exactly(t, []byte{1, 2}, dst)
+			assert.NoError(t, tc.buf.Close())
+		})
+	}
 }
 
 func Test_File_Seek(t *testing.T) {
@@ -817,146 +851,134 @@ func Test_File_Seek(t *testing.T) {
 }
 
 func Test_File_Seek_beyondLen(t *testing.T) {
-	testFn := func(t *testing.T, buf comFileBuffer) {
-		// --- When ---
-		n, err := buf.Seek(5, io.SeekStart)
+	tt := []struct {
+		testN string
 
-		// --- Then ---
-		assert.NoError(t, err)
-		assert.Exactly(t, int64(5), n)
+		buf filer
+	}{
+		{"fil", TempFile(t, os.O_RDWR, []byte{0, 1, 2})},
+		{"buf", With([]byte{0, 1, 2})},
 	}
 
-	// Initial buffer value.
-	in := []byte{0, 1, 2}
+	for _, tc := range tt {
+		t.Run(tc.testN, func(t *testing.T) {
+			// --- When ---
+			n, err := tc.buf.Seek(5, io.SeekStart)
 
-	// Setup file.
-	fil := TempFile(t, os.O_RDWR, in)
-	testFn(t, fil)
-
-	// Setup buffer.
-	buf := With(in)
-	testFn(t, buf)
+			// --- Then ---
+			assert.NoError(t, err)
+			assert.Exactly(t, int64(5), n)
+		})
+	}
 }
 
 func Test_File_Truncate_toZero(t *testing.T) {
-	testFn := func(t *testing.T, buf comFileBuffer) {
-		// --- When ---
-		err := buf.Truncate(0)
+	tt := []struct {
+		testN string
 
-		// --- Then ---
-		assert.NoError(t, err)
-		assert.Exactly(t, int64(0), kit.CurrOffset(t, buf))
-		assert.Exactly(t, []byte{}, kit.ReadAllFromStart(t, buf))
-		assert.NoError(t, buf.Close())
+		buf filer
+	}{
+		{"fil", TempFile(t, os.O_RDWR, []byte{0, 1, 2, 3})},
+		{"buf", With([]byte{0, 1, 2, 3})},
 	}
 
-	// Initial buffer value.
-	in := []byte{0, 1, 2, 3}
+	for _, tc := range tt {
+		t.Run(tc.testN, func(t *testing.T) {
+			// --- When ---
+			err := tc.buf.Truncate(0)
 
-	// Setup file.
-	fil := TempFile(t, os.O_RDWR, in)
-	testFn(t, fil)
-
-	// Setup buffer.
-	buf := With(in)
-	testFn(t, buf)
+			// --- Then ---
+			assert.NoError(t, err)
+			assert.Exactly(t, int64(0), kit.CurrOffset(t, tc.buf))
+			assert.Exactly(t, []byte{}, kit.ReadAllFromStart(t, tc.buf))
+			assert.NoError(t, tc.buf.Close())
+		})
+	}
 }
 
 func Test_File_Truncate_toOne(t *testing.T) {
-	testFn := func(t *testing.T, buf comFileBuffer) {
-		// --- When ---
-		err := buf.Truncate(1)
+	tt := []struct {
+		testN string
 
-		// --- Then ---
-		assert.NoError(t, err)
-		assert.Exactly(t, int64(0), kit.CurrOffset(t, buf))
-		assert.Exactly(t, []byte{0}, kit.ReadAllFromStart(t, buf))
-		assert.NoError(t, buf.Close())
+		buf filer
+	}{
+		{"fil", TempFile(t, os.O_RDWR, []byte{0, 1, 2, 3})},
+		{"buf", With([]byte{0, 1, 2, 3})},
 	}
 
-	// Initial buffer value.
-	in := []byte{0, 1, 2, 3}
+	for _, tc := range tt {
+		t.Run(tc.testN, func(t *testing.T) {
+			// --- When ---
+			err := tc.buf.Truncate(1)
 
-	// Setup file.
-	fil := TempFile(t, os.O_RDWR, in)
-	testFn(t, fil)
-
-	// Setup buffer.
-	buf := With(in)
-	testFn(t, buf)
+			// --- Then ---
+			assert.NoError(t, err)
+			assert.Exactly(t, int64(0), kit.CurrOffset(t, tc.buf))
+			assert.Exactly(t, []byte{0}, kit.ReadAllFromStart(t, tc.buf))
+			assert.NoError(t, tc.buf.Close())
+		})
+	}
 }
 
 func Test_File_Truncate_toZeroAndWrite(t *testing.T) {
-	testFn := func(t *testing.T, buf comFileBuffer) {
-		// --- When ---
-		err := buf.Truncate(0)
-		assert.NoError(t, err)
+	tt := []struct {
+		testN string
 
-		n, err := buf.Write([]byte{4, 5})
-
-		// --- Then ---
-		assert.NoError(t, err)
-		assert.Exactly(t, 2, n)
-		assert.Exactly(t, int64(2), kit.CurrOffset(t, buf))
-		assert.Exactly(t, []byte{4, 5}, kit.ReadAllFromStart(t, buf))
-		assert.NoError(t, buf.Close())
+		buf filer
+	}{
+		{"fil", TempFile(t, os.O_RDWR, []byte{0, 1, 2, 3})},
+		{"buf", With([]byte{0, 1, 2, 3})},
 	}
 
-	// Initial buffer value.
-	in := []byte{0, 1, 2, 3}
+	for _, tc := range tt {
+		t.Run(tc.testN, func(t *testing.T) {
+			// --- When ---
+			err := tc.buf.Truncate(0)
+			assert.NoError(t, err)
 
-	// Setup file.
-	fil := TempFile(t, os.O_RDWR, in)
-	testFn(t, fil)
+			n, err := tc.buf.Write([]byte{4, 5})
 
-	// Setup buffer.
-	buf := With(in)
-	testFn(t, buf)
+			// --- Then ---
+			assert.NoError(t, err)
+			assert.Exactly(t, 2, n)
+			assert.Exactly(t, int64(2), kit.CurrOffset(t, tc.buf))
+			assert.Exactly(t, []byte{4, 5}, kit.ReadAllFromStart(t, tc.buf))
+			assert.NoError(t, tc.buf.Close())
+		})
+	}
 }
 
 func Test_File_Truncate_beyondLenAndWrite(t *testing.T) {
-	testFn := func(t *testing.T, buf comFileBuffer) {
-		kit.Seek(t, buf, 1, io.SeekStart)
+	tt := []struct {
+		testN string
 
-		// --- When ---
-		assert.NoError(t, buf.Truncate(8))
-		n, err := buf.Write([]byte{4, 5})
-
-		// --- Then ---
-		assert.NoError(t, err)
-		assert.Exactly(t, 2, n)
-		assert.Exactly(t, int64(10), kit.CurrOffset(t, buf))
-		assert.Exactly(t, []byte{0, 1, 2, 3, 0, 0, 0, 0, 4, 5}, kit.ReadAllFromStart(t, buf))
-		assert.NoError(t, buf.Close())
+		buf filer
+	}{
+		{"fil", TempFile(t, os.O_RDWR|os.O_APPEND, []byte{0, 1, 2, 3})},
+		{"buf", With([]byte{0, 1, 2, 3}, Append)},
 	}
 
-	// Initial buffer value.
-	in := []byte{0, 1, 2, 3}
+	for _, tc := range tt {
+		t.Run(tc.testN, func(t *testing.T) {
+			kit.Seek(t, tc.buf, 1, io.SeekStart)
 
-	// Setup file.
-	fil := TempFile(t, os.O_RDWR|os.O_APPEND, in)
-	testFn(t, fil)
+			// --- When ---
+			assert.NoError(t, tc.buf.Truncate(8))
+			n, err := tc.buf.Write([]byte{4, 5})
 
-	// Setup buffer.
-	buf := With(in, Append)
-	testFn(t, buf)
+			// --- Then ---
+			assert.NoError(t, err)
+			assert.Exactly(t, 2, n)
+			assert.Exactly(t, int64(10), kit.CurrOffset(t, tc.buf))
+
+			exp := []byte{0, 1, 2, 3, 0, 0, 0, 0, 4, 5}
+			assert.Exactly(t, exp, kit.ReadAllFromStart(t, tc.buf))
+			assert.NoError(t, tc.buf.Close())
+		})
+	}
 }
 
 func Test_File_Truncate_beyondCapAndWrite(t *testing.T) {
-	testFn := func(t *testing.T, buf comFileBuffer) {
-		// --- When ---
-		assert.NoError(t, buf.Truncate(10))
-		n, err := buf.Write([]byte{4, 5})
-
-		// --- Then ---
-		assert.NoError(t, err)
-		assert.Exactly(t, 2, n)
-		assert.Exactly(t, int64(12), kit.CurrOffset(t, buf))
-		want := []byte{0, 1, 2, 3, 0, 0, 0, 0, 0, 0, 4, 5}
-		assert.Exactly(t, want, kit.ReadAllFromStart(t, buf))
-		assert.NoError(t, buf.Close())
-	}
-
 	// Initial buffer value.
 	in := make([]byte, 4, 8)
 	in[0] = 0
@@ -964,64 +986,83 @@ func Test_File_Truncate_beyondCapAndWrite(t *testing.T) {
 	in[2] = 2
 	in[3] = 3
 
-	// Setup file.
-	fil := TempFile(t, os.O_RDWR|os.O_APPEND, in)
-	testFn(t, fil)
+	tt := []struct {
+		testN string
 
-	// Setup buffer.
-	buf := With(in, Append)
-	testFn(t, buf)
+		buf filer
+	}{
+		{"fil", TempFile(t, os.O_RDWR|os.O_APPEND, in)},
+		{"buf", With(in, Append)},
+	}
+
+	for _, tc := range tt {
+		t.Run(tc.testN, func(t *testing.T) {
+			// --- When ---
+			assert.NoError(t, tc.buf.Truncate(10))
+			n, err := tc.buf.Write([]byte{4, 5})
+
+			// --- Then ---
+			assert.NoError(t, err)
+			assert.Exactly(t, 2, n)
+			assert.Exactly(t, int64(12), kit.CurrOffset(t, tc.buf))
+			want := []byte{0, 1, 2, 3, 0, 0, 0, 0, 0, 0, 4, 5}
+			assert.Exactly(t, want, kit.ReadAllFromStart(t, tc.buf))
+			assert.NoError(t, tc.buf.Close())
+		})
+	}
 }
 
 func Test_File_Truncate_extendBeyondLenResetAndWrite(t *testing.T) {
-	testFn := func(t *testing.T, buf comFileBuffer) {
-		// --- When ---
-		assert.NoError(t, buf.Truncate(8))
-		assert.NoError(t, buf.Truncate(0))
-		n, err := buf.Write([]byte{4, 5})
+	tt := []struct {
+		testN string
 
-		// --- Then ---
-		assert.NoError(t, err)
-		assert.Exactly(t, 2, n)
-		assert.Exactly(t, int64(2), kit.CurrOffset(t, buf))
-		assert.Exactly(t, []byte{4, 5}, kit.ReadAllFromStart(t, buf))
-		assert.NoError(t, buf.Close())
+		buf filer
+	}{
+		{"fil", TempFile(t, os.O_RDWR|os.O_APPEND, []byte{0, 1, 2, 3})},
+		{"buf", With([]byte{0, 1, 2, 3}, Append)},
 	}
 
-	// Initial buffer value.
-	in := []byte{0, 1, 2, 3}
+	for _, tc := range tt {
+		t.Run(tc.testN, func(t *testing.T) {
+			// --- When ---
+			assert.NoError(t, tc.buf.Truncate(8))
+			assert.NoError(t, tc.buf.Truncate(0))
+			n, err := tc.buf.Write([]byte{4, 5})
 
-	// Setup file.
-	fil := TempFile(t, os.O_RDWR|os.O_APPEND, in)
-	testFn(t, fil)
-
-	// Setup buffer.
-	buf := With(in, Append)
-	testFn(t, buf)
+			// --- Then ---
+			assert.NoError(t, err)
+			assert.Exactly(t, 2, n)
+			assert.Exactly(t, int64(2), kit.CurrOffset(t, tc.buf))
+			assert.Exactly(t, []byte{4, 5}, kit.ReadAllFromStart(t, tc.buf))
+			assert.NoError(t, tc.buf.Close())
+		})
+	}
 }
 
 func Test_File_Truncate_edgeCaseWhenSizeEqualsLength(t *testing.T) {
-	testFn := func(t *testing.T, buf comFileBuffer) {
-		// --- When ---
-		assert.NoError(t, buf.Truncate(4))
-		n, err := buf.Write([]byte{4, 5})
+	tt := []struct {
+		testN string
 
-		// --- Then ---
-		assert.NoError(t, err)
-		assert.Exactly(t, 2, n)
-		assert.Exactly(t, int64(6), kit.CurrOffset(t, buf))
-		assert.Exactly(t, []byte{0, 1, 2, 3, 4, 5}, kit.ReadAllFromStart(t, buf))
-		assert.NoError(t, buf.Close())
+		buf filer
+	}{
+		{"fil", TempFile(t, os.O_RDWR|os.O_APPEND, []byte{0, 1, 2, 3})},
+		{"buf", With([]byte{0, 1, 2, 3}, Append)},
 	}
 
-	// Initial buffer value.
-	in := []byte{0, 1, 2, 3}
+	for _, tc := range tt {
+		t.Run(tc.testN, func(t *testing.T) {
+			// --- When ---
+			assert.NoError(t, tc.buf.Truncate(4))
+			n, err := tc.buf.Write([]byte{4, 5})
 
-	// Setup file.
-	fil := TempFile(t, os.O_RDWR|os.O_APPEND, in)
-	testFn(t, fil)
+			// --- Then ---
+			assert.NoError(t, err)
+			assert.Exactly(t, 2, n)
+			assert.Exactly(t, int64(6), kit.CurrOffset(t, tc.buf))
 
-	// Setup buffer.
-	buf := With(in, Append)
-	testFn(t, buf)
+			exp := []byte{0, 1, 2, 3, 4, 5}
+			assert.Exactly(t, exp, kit.ReadAllFromStart(t, tc.buf))
+			assert.NoError(t, tc.buf.Close())
+		})
+	}
 }
